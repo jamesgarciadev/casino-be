@@ -59,7 +59,7 @@ type Mutation {
 input RegisterInput {
     name: String! @rules(apply: ["required", "string", "min:2", "max:255"])
     email: String! @rules(apply: ["required", "email", "max:255", "unique:users,email"])
-    password: String! @rules(apply: ["required", "string", "min:8", "max:255", "same:passwordConfirmation"])
+    password: String! @rules(apply: ["required", "string", "App\\Rules\\StrongPassword", "same:passwordConfirmation"])
     passwordConfirmation: String! @rules(apply: ["required", "string"])
 }
 

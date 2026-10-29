@@ -31,7 +31,7 @@ class RateLimitingTest extends TestCase
 
         $this->travel(61)->seconds();
 
-        $this->graphQL('mutation { login(input: { email: "cust@example.com", password: "password" }) { token } }')
+        $this->graphQL('mutation { login(input: { email: "cust@example.com", password: "Password1!" }) { token } }')
             ->assertJsonPath('errors', null);
     }
 
@@ -45,7 +45,7 @@ class RateLimitingTest extends TestCase
         $this->failedLogin('adminLogin')->assertGraphQLErrorMessage('These credentials do not match our records.');
 
         $this->graphQL(/** @lang GraphQL */ '
-            mutation { register(input: { name: "Jane", email: "jane@example.com", password: "secret123", passwordConfirmation: "secret123" }) { token } }
+            mutation { register(input: { name: "Jane", email: "jane@example.com", password: "Secret123!", passwordConfirmation: "Secret123!" }) { token } }
         ')->assertJsonPath('errors', null);
     }
 

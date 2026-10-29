@@ -19,7 +19,7 @@ class TokenScopeTest extends TestCase
         $this->userWithRole(Role::Owner, ['email' => 'owner@staff.test']);
 
         $token = $this->graphQL(/** @lang GraphQL */ '
-            mutation { adminLogin(input: { email: "owner@staff.test", password: "password" }) { token } }
+            mutation { adminLogin(input: { email: "owner@staff.test", password: "Password1!" }) { token } }
         ')->json('data.adminLogin.token');
 
         $this->travel(8)->hours();
@@ -37,7 +37,7 @@ class TokenScopeTest extends TestCase
         $this->userWithRole(Role::Customer, ['email' => 'cust@example.com']);
 
         $token = $this->graphQL(/** @lang GraphQL */ '
-            mutation { login(input: { email: "cust@example.com", password: "password" }) { token } }
+            mutation { login(input: { email: "cust@example.com", password: "Password1!" }) { token } }
         ')->json('data.login.token');
 
         $this->travel(29)->days();
@@ -54,8 +54,8 @@ class TokenScopeTest extends TestCase
         $this->userWithRole(Role::Customer, ['email' => 'cust@example.com']);
         $this->userWithRole(Role::Admin, ['email' => 'admin@staff.test']);
 
-        $this->graphQL('mutation { login(input: { email: "cust@example.com", password: "password" }) { token } }');
-        $this->graphQL('mutation { adminLogin(input: { email: "admin@staff.test", password: "password" }) { token } }');
+        $this->graphQL('mutation { login(input: { email: "cust@example.com", password: "Password1!" }) { token } }');
+        $this->graphQL('mutation { adminLogin(input: { email: "admin@staff.test", password: "Password1!" }) { token } }');
 
         $abilities = PersonalAccessToken::query()->orderBy('id')->pluck('abilities')->all();
 

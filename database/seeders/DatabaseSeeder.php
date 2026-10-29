@@ -22,11 +22,11 @@ class DatabaseSeeder extends Seeder
             return;
         }
 
-        // Local demo accounts, one per role. Password: "password".
+        // Local demo accounts, one per role. Password: "Password1!". Re-running resets them.
         foreach (Role::cases() as $role) {
-            User::firstOrCreate(
+            User::updateOrCreate(
                 ['email' => "{$role->value}@casino.test"],
-                ['name' => ucfirst($role->value).' Demo', 'password' => 'password', 'email_verified_at' => now()],
+                ['name' => ucfirst($role->value).' Demo', 'password' => 'Password1!', 'email_verified_at' => now()],
             )->syncRoles([$role->value]);
         }
     }

@@ -25,16 +25,16 @@ class AuthServiceTest extends TestCase
 
     public function test_register_customer_hashes_the_password_and_assigns_only_the_customer_role(): void
     {
-        ['user' => $user] = $this->auth->registerCustomer(['name' => 'Jane', 'email' => 'jane@example.com', 'password' => 'secret123']);
+        ['user' => $user] = $this->auth->registerCustomer(['name' => 'Jane', 'email' => 'jane@example.com', 'password' => 'Secret123!']);
 
-        $this->assertNotSame('secret123', $user->password);
-        $this->assertTrue(Hash::check('secret123', $user->password));
+        $this->assertNotSame('Secret123!', $user->password);
+        $this->assertTrue(Hash::check('Secret123!', $user->password));
         $this->assertSame(['customer'], $user->roleNames());
     }
 
     public function test_customer_token_is_named_web_and_expires_in_30_days(): void
     {
-        ['user' => $user] = $this->auth->registerCustomer(['name' => 'Jane', 'email' => 'jane@example.com', 'password' => 'secret123']);
+        ['user' => $user] = $this->auth->registerCustomer(['name' => 'Jane', 'email' => 'jane@example.com', 'password' => 'Secret123!']);
 
         $token = $user->tokens()->sole();
 
@@ -47,7 +47,7 @@ class AuthServiceTest extends TestCase
     {
         $this->userWithRole(Role::Admin, ['email' => 'admin@staff.test']);
 
-        ['user' => $user] = $this->auth->loginStaff('admin@staff.test', 'password');
+        ['user' => $user] = $this->auth->loginStaff('admin@staff.test', 'Password1!');
 
         $token = $user->tokens()->sole();
 
@@ -61,7 +61,7 @@ class AuthServiceTest extends TestCase
         foreach (Role::staff() as $role) {
             $user = $this->userWithRole($role);
 
-            $this->assertTrue($this->auth->loginStaff($user->email, 'password')['user']->is($user), $role->value);
+            $this->assertTrue($this->auth->loginStaff($user->email, 'Password1!')['user']->is($user), $role->value);
         }
     }
 
@@ -69,7 +69,7 @@ class AuthServiceTest extends TestCase
     {
         $owner = $this->userWithRole(Role::Owner, ['email' => 'owner@staff.test']);
 
-        $this->auth->loginStaff('owner@staff.test', 'password');
+        $this->auth->loginStaff('owner@staff.test', 'Password1!');
 
         $this->assertDatabaseHas('activity_log', [
             'log_name' => 'auth',
@@ -85,7 +85,7 @@ class AuthServiceTest extends TestCase
 
         foreach (['loginCustomer', 'loginStaff'] as $method) {
             try {
-                $this->auth->{$method}('norole@example.com', 'password');
+                $this->auth->{$method}('norole@example.com', 'Password1!');
                 $this->fail("{$method} should have rejected a user with no role");
             } catch (AuthenticationException $e) {
                 $this->assertSame('These credentials do not match our records.', $e->getMessage());
@@ -100,7 +100,7 @@ class AuthServiceTest extends TestCase
         $this->userWithRole(Role::Customer, ['email' => 'cust@example.com']);
 
         try {
-            $this->auth->loginStaff('cust@example.com', 'password');
+            $this->auth->loginStaff('cust@example.com', 'Password1!');
         } catch (AuthenticationException) {
         }
 

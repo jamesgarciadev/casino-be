@@ -15,8 +15,14 @@ php artisan serve                # http://localhost:8000/graphql
 
 GraphiQL (dev only): http://localhost:8000/graphiql
 
-Local demo accounts (password `password`): `customer@casino.test`, `moderator@casino.test`,
+Local demo accounts (password `Password1!`): `customer@casino.test`, `moderator@casino.test`,
 `admin@casino.test`, `owner@casino.test`.
+
+## Password policy
+
+New passwords (registration) must be 8–64 characters with an uppercase letter, a lowercase letter, a number and a
+special character, and no spaces: `App\Rules\StrongPassword`. casino-web mirrors it in Zod. Sign-in does not
+re-check the policy, so older accounts keep working.
 
 ## Roles and access
 

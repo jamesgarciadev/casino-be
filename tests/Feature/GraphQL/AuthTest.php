@@ -16,7 +16,7 @@ class AuthTest extends TestCase
     {
         $response = $this->graphQL(/** @lang GraphQL */ '
             mutation {
-                register(input: { name: "Jane", email: "jane@example.com", password: "secret123", passwordConfirmation: "secret123" }) {
+                register(input: { name: "Jane", email: "jane@example.com", password: "Secret123!", passwordConfirmation: "Secret123!" }) {
                     token
                     user { email roles }
                 }
@@ -42,7 +42,7 @@ class AuthTest extends TestCase
 
         $this->graphQL(/** @lang GraphQL */ '
             mutation {
-                register(input: { name: "Jane", email: "taken@example.com", password: "secret123", passwordConfirmation: "secret123" }) { token }
+                register(input: { name: "Jane", email: "taken@example.com", password: "Secret123!", passwordConfirmation: "Secret123!" }) { token }
             }
         ')->assertGraphQLValidationKeys(['input.email']);
 
@@ -53,7 +53,7 @@ class AuthTest extends TestCase
     {
         $this->graphQL(/** @lang GraphQL */ '
             mutation {
-                register(input: { name: "Jane", email: "jane@example.com", password: "secret123", passwordConfirmation: "secret124" }) { token }
+                register(input: { name: "Jane", email: "jane@example.com", password: "Secret123!", passwordConfirmation: "Secret124!" }) { token }
             }
         ')->assertGraphQLValidationKeys(['input.password']);
 
@@ -65,7 +65,7 @@ class AuthTest extends TestCase
         $this->userWithRole(Role::Customer, ['email' => 'cust@example.com']);
 
         $token = $this->graphQL(/** @lang GraphQL */ '
-            mutation { login(input: { email: "cust@example.com", password: "password" }) { token user { roles } } }
+            mutation { login(input: { email: "cust@example.com", password: "Password1!" }) { token user { roles } } }
         ')->assertJsonPath('data.login.user.roles', ['customer'])->json('data.login.token');
 
         $this->assertIsString($token);
@@ -81,7 +81,7 @@ class AuthTest extends TestCase
         ')->assertGraphQLErrorMessage('These credentials do not match our records.');
 
         $this->graphQL(/** @lang GraphQL */ '
-            mutation { login(input: { email: "nobody@example.com", password: "password" }) { token } }
+            mutation { login(input: { email: "nobody@example.com", password: "Password1!" }) { token } }
         ')->assertGraphQLErrorMessage('These credentials do not match our records.');
     }
 
@@ -90,7 +90,7 @@ class AuthTest extends TestCase
         $this->userWithRole(Role::Customer, ['email' => 'cust@example.com']);
 
         $this->graphQL(/** @lang GraphQL */ '
-            mutation { adminLogin(input: { email: "cust@example.com", password: "password" }) { token } }
+            mutation { adminLogin(input: { email: "cust@example.com", password: "Password1!" }) { token } }
         ')->assertGraphQLErrorMessage('These credentials do not match our records.');
     }
 
@@ -99,7 +99,7 @@ class AuthTest extends TestCase
         $this->userWithRole(Role::Admin, ['email' => 'staff@example.com']);
 
         $this->graphQL(/** @lang GraphQL */ '
-            mutation { login(input: { email: "staff@example.com", password: "password" }) { token } }
+            mutation { login(input: { email: "staff@example.com", password: "Password1!" }) { token } }
         ')->assertGraphQLErrorMessage('These credentials do not match our records.');
     }
 
@@ -108,7 +108,7 @@ class AuthTest extends TestCase
         $this->userWithRole(Role::Moderator, ['email' => 'mod@example.com']);
 
         $this->graphQL(/** @lang GraphQL */ '
-            mutation { adminLogin(input: { email: "mod@example.com", password: "password" }) { user { roles permissions } } }
+            mutation { adminLogin(input: { email: "mod@example.com", password: "Password1!" }) { user { roles permissions } } }
         ')->assertJsonPath('data.adminLogin.user.roles', ['moderator'])
             ->assertJsonPath('data.adminLogin.user.permissions', ['users.view']);
 
