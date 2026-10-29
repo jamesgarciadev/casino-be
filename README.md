@@ -33,10 +33,25 @@ is rejected even if its user happens to be staff.
 ## Commands
 
 ```sh
-composer test            # feature tests (SQLite in-memory)
+composer test            # unit + feature tests (SQLite in-memory)
 composer schema:print    # regenerate graphql/schema.public.graphql for frontend codegen
 vendor/bin/pint          # code style
 ```
+
+## Tests
+
+| Folder | Covers |
+|---|---|
+| `tests/Unit` | pure logic with no app or database (role → permission map) |
+| `tests/Feature/GraphQL` | the API contract: auth, token scopes and expiry, rate limits, admin queries and mutations |
+| `tests/Feature/Services` | `AuthService` and `UserRoleService` called directly |
+| `tests/Feature/Models`, `Seeders` | user search scope, roles seeded in sync with `App\Enums\Role` |
+
+`Tests\TestCase` seeds roles for every test that uses `RefreshDatabase` and provides `userWithRole()`,
+`adminToken()`, `customerToken()` and `forgetAuth()` (call it between requests that switch tokens).
+
+Browser tests live in `casino-web` and `casino-fe` (`npm run test:e2e`). Each starts its own copy of this API on
+port 8100 / 8101 against a separate `casino_e2e_*` database.
 
 ## Layout
 

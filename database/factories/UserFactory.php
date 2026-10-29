@@ -2,6 +2,7 @@
 
 namespace Database\Factories;
 
+use App\Enums\Role;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Facades\Hash;
@@ -31,6 +32,14 @@ class UserFactory extends Factory
             'password' => static::$password ??= Hash::make('password'),
             'remember_token' => Str::random(10),
         ];
+    }
+
+    /**
+     * Assign a role after creation. Requires RolesAndPermissionsSeeder to have run.
+     */
+    public function role(Role $role): static
+    {
+        return $this->afterCreating(fn (User $user) => $user->assignRole($role->value));
     }
 
     /**

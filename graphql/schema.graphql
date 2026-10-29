@@ -35,13 +35,13 @@ type Query {
 
 type Mutation {
     "Create a customer account and return a customer-scoped token."
-    register(input: RegisterInput! @spread): AuthPayload! @throttle(maxAttempts: 5, decayMinutes: 1)
+    register(input: RegisterInput! @spread): AuthPayload! @throttle(prefix: "register", maxAttempts: 5, decayMinutes: 1)
 
     "Customer sign-in for the web app. Returns a customer-scoped token."
-    login(input: LoginInput! @spread): AuthPayload! @throttle(maxAttempts: 5, decayMinutes: 1)
+    login(input: LoginInput! @spread): AuthPayload! @throttle(prefix: "login", maxAttempts: 5, decayMinutes: 1)
 
     "Staff sign-in for the admin console. Returns an admin-scoped token."
-    adminLogin(input: LoginInput! @spread): AuthPayload! @throttle(maxAttempts: 5, decayMinutes: 1)
+    adminLogin(input: LoginInput! @spread): AuthPayload! @throttle(prefix: "adminLogin", maxAttempts: 5, decayMinutes: 1)
 
     "Revoke the token used for this request."
     logout: Boolean! @guard
