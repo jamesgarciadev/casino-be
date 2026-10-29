@@ -1,0 +1,105 @@
+# Casino API contract. This file is the single source of truth for fe and web.
+# Never remove or rename a field in place: add the new one and mark the old one @deprecated.
+#
+# Admin-only fields are prefixed with `admin` and always carry
+# @guard + @tokenCan(ability: "admin") + a @can* policy check.
+
+"An ISO 8601 datetime string with timezone, e.g. `2026-10-29T13:43:32+00:00`."
+scalar DateTime @scalar(class: "Nuwave\\Lighthouse\\Schema\\Types\\Scalars\\DateTimeTz")
+
+type Query {
+    "The currently authenticated user (any token scope)."
+    me: User @guard @auth
+
+    "Staff: list users. Requires `users.view`."
+    adminUsers(
+        "Matches name or email."
+        search: String @scope(name: "search")
+    ): [User!]!
+        @guard
+        @tokenCan(ability: "admin")
+        @canModel(ability: "viewAny", model: "App\\Models\\User")
+        @paginate(defaultCount: 20, maxCount: 100)
+        @orderBy(column: "id", direction: DESC)
+
+    "Staff: audit log of admin and auth events. Requires `activity.view`."
+    adminActivities(
+        logName: String @eq(key: "log_name")
+    ): [Activity!]!
+        @guard
+        @tokenCan(ability: "admin")
+        @canModel(ability: "viewAny", model: "App\\Models\\Activity")
+        @paginate(defaultCount: 20, maxCount: 100)
+        @orderBy(column: "id", direction: DESC)
+}
+
+type Mutation {
+    "Create a customer account and return a customer-scoped token."
+    register(input: RegisterInput! @spread): AuthPayload! @throttle(maxAttempts: 5, decayMinutes: 1)
+
+    "Customer sign-in for the web app. Returns a customer-scoped token."
+    login(input: LoginInput! @spread): AuthPayload! @throttle(maxAttempts: 5, decayMinutes: 1)
+
+    "Staff sign-in for the admin console. Returns an admin-scoped token."
+    adminLogin(input: LoginInput! @spread): AuthPayload! @throttle(maxAttempts: 5, decayMinutes: 1)
+
+    "Revoke the token used for this request."
+    logout: Boolean! @guard
+
+    "Owner: replace a user's role. Audit-logged."
+    adminAssignRole(
+        userId: ID! @rules(apply: ["exists:users,id"])
+        role: Role!
+    ): User!
+        @guard
+        @tokenCan(ability: "admin")
+        @canFind(ability: "assignRole", find: "userId", model: "App\\Models\\User")
+}
+
+input RegisterInput {
+    name: String! @rules(apply: ["required", "string", "min:2", "max:255"])
+    email: String! @rules(apply: ["required", "email", "max:255", "unique:users,email"])
+    password: String! @rules(apply: ["required", "string", "min:8", "max:255", "same:passwordConfirmation"])
+    passwordConfirmation: String! @rules(apply: ["required", "string"])
+}
+
+input LoginInput {
+    email: String! @rules(apply: ["required", "email"])
+    password: String! @rules(apply: ["required", "string"])
+}
+
+type AuthPayload {
+    token: String!
+    user: User!
+}
+
+enum Role {
+    CUSTOMER @enum(value: "customer")
+    MODERATOR @enum(value: "moderator")
+    ADMIN @enum(value: "admin")
+    OWNER @enum(value: "owner")
+}
+
+type User {
+    id: ID!
+    name: String!
+    email: String!
+    roles: [String!]! @with(relation: "roles") @method(name: "roleNames")
+    permissions: [String!]! @method(name: "permissionNames")
+    emailVerifiedAt: DateTime @rename(attribute: "email_verified_at")
+    createdAt: DateTime! @rename(attribute: "created_at")
+    updatedAt: DateTime! @rename(attribute: "updated_at")
+}
+
+type Activity {
+    id: ID!
+    logName: String @rename(attribute: "log_name")
+    event: String
+    description: String!
+    causer: User @morphTo
+    subjectType: String @rename(attribute: "subject_type")
+    subjectId: ID @rename(attribute: "subject_id")
+    "JSON-encoded properties, including before/after state for admin changes."
+    properties: String @method(name: "propertiesJson")
+    createdAt: DateTime! @rename(attribute: "created_at")
+}

@@ -1,0 +1,152 @@
+type Query {
+ "The currently authenticated user (any token scope)."
+ me: User
+ "Staff: list users. Requires `users.view`."
+ adminUsers(
+ "Matches name or email."
+ search: String
+ "Limits number of fetched items. Maximum allowed value: 100."
+ first: Int! = 20
+ "The offset from which items are returned."
+ page: Int
+ ): UserPaginator!
+ "Staff: audit log of admin and auth events. Requires `activity.view`."
+ adminActivities(
+ logName: String
+ "Limits number of fetched items. Maximum allowed value: 100."
+ first: Int! = 20
+ "The offset from which items are returned."
+ page: Int
+ ): ActivityPaginator!
+}
+type Mutation {
+ "Create a customer account and return a customer-scoped token."
+ register(input: RegisterInput!): AuthPayload!
+ "Customer sign-in for the web app. Returns a customer-scoped token."
+ login(input: LoginInput!): AuthPayload!
+ "Staff sign-in for the admin console. Returns an admin-scoped token."
+ adminLogin(input: LoginInput!): AuthPayload!
+ "Revoke the token used for this request."
+ logout: Boolean!
+ "Owner: replace a user's role. Audit-logged."
+ adminAssignRole(userId: ID!, role: Role!): User!
+}
+"An ISO 8601 datetime string with timezone, e.g. `2026-10-29T13:43:32+00:00`."
+scalar DateTime
+input RegisterInput {
+ name: String!
+ email: String!
+ password: String!
+ passwordConfirmation: String!
+}
+input LoginInput {
+ email: String!
+ password: String!
+}
+type AuthPayload {
+ token: String!
+ user: User!
+}
+enum Role {
+ CUSTOMER
+ MODERATOR
+ ADMIN
+ OWNER
+}
+type User {
+ id: ID!
+ name: String!
+ email: String!
+ roles: [String!]!
+ permissions: [String!]!
+ emailVerifiedAt: DateTime
+ createdAt: DateTime!
+ updatedAt: DateTime!
+}
+type Activity {
+ id: ID!
+ logName: String
+ event: String
+ description: String!
+ causer: User
+ subjectType: String
+ subjectId: ID
+ "JSON-encoded properties, including before/after state for admin changes."
+ properties: String
+ createdAt: DateTime!
+}
+"Information about pagination using a fully featured paginator."
+type PaginatorInfo {
+ "Number of items in the current page."
+ count: Int!
+ "Index of the current page."
+ currentPage: Int!
+ "Index of the first item in the current page."
+ firstItem: Int
+ "Are there more pages after this one?"
+ hasMorePages: Boolean!
+ "Index of the last item in the current page."
+ lastItem: Int
+ "Index of the last available page."
+ lastPage: Int!
+ "Number of items per page."
+ perPage: Int!
+ "Number of total available items."
+ total: Int!
+}
+"A paginated list of User items."
+type UserPaginator {
+ "Pagination information about the list of items."
+ paginatorInfo: PaginatorInfo!
+ "A list of User items."
+ data: [User!]!
+}
+"A paginated list of Activity items."
+type ActivityPaginator {
+ "Pagination information about the list of items."
+ paginatorInfo: PaginatorInfo!
+ "A list of Activity items."
+ data: [Activity!]!
+}
+"Directions for ordering a list of records."
+enum SortOrder {
+ "Sort records in ascending order."
+ ASC
+ "Sort records in descending order."
+ DESC
+}
+"Aggregate functions when ordering by a relation without specifying a column."
+enum OrderByRelationAggregateFunction {
+ "Amount of items."
+ COUNT
+}
+"Aggregate functions when ordering by a relation that may specify a column."
+enum OrderByRelationWithColumnAggregateFunction {
+ "Average."
+ AVG
+ "Minimum."
+ MIN
+ "Maximum."
+ MAX
+ "Sum."
+ SUM
+ "Amount of items."
+ COUNT
+}
+"Allows ordering a list of records."
+input OrderByClause {
+ "The column that is used for ordering."
+ column: String!
+ "The direction that is used for ordering."
+ order: SortOrder!
+}
+"Specify if you want to include or exclude trashed results from a query."
+enum Trashed {
+ "Only return trashed results."
+ ONLY
+ "Return both trashed and non-trashed results."
+ WITH
+ "Only return non-trashed results."
+ WITHOUT
+}
+
