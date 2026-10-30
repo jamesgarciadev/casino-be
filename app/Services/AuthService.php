@@ -24,6 +24,7 @@ class AuthService
         $user = DB::transaction(function () use ($input) {
             $user = User::create($input);
             $user->assignRole(Role::Customer->value);
+            $user->wallet()->create(['balance' => WalletService::STARTING_BALANCE]);
 
             return $user;
         });

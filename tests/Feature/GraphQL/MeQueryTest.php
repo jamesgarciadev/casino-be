@@ -34,7 +34,7 @@ class MeQueryTest extends TestCase
         $expected = [
             'moderator' => ['users.view'],
             'admin' => ['users.view', 'activity.view'],
-            'owner' => ['users.view', 'users.manage-roles', 'activity.view'],
+            'owner' => ['users.view', 'users.manage-roles', 'activity.view', 'matches.manage'],
         ];
 
         foreach ($expected as $role => $permissions) {

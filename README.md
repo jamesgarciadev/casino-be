@@ -32,9 +32,31 @@ re-check the policy, so older accounts keep working.
 | moderator | fe (`adminLogin`) | `users.view` |
 | admin | fe | `users.view`, `activity.view` |
 | owner | fe | all, incl. `users.manage-roles` |
+| simulator | nothing (service account) | `matches.manage` via a `sim` token from `php artisan sim:token` |
 
 Every `admin*` field requires an `admin`-scoped token **and** the matching policy, so a customer token
 is rejected even if its user happens to be staff.
+
+## Betting (play money)
+
+0dds.bet's matches, wallets and bets, ported from the `casino-design` backend. Credits (CR) have no cash value.
+
+- `matches(state, game)`, `match(id)`: public. Live first, then by start time. Stored as `App\Models\Fixture`
+  (exposed as `Match`; `match` is reserved in PHP). Unrelated to `EsportsMatch`, which is raw PandaScore data.
+- `wallet`, `myBets`, `placeBet`, `topUpWallet`: customer token only. Wallets open with 1,000 CR (on registration, or on
+  first use for older accounts); top-up adds 500.
+- `placeBet` runs in one transaction with the wallet and match rows locked. Odds are read from the match, never the
+  client, and stored on the bet. Bets are accepted while a match is upcoming or live, and rejected once it is finished.
+- Payout is `stake × odds` rounded half up to whole credits, computed in integers (`Bet::payoutFor`).
+- `simCreateMatch`, `simUpdateMatch`: casino-sim's feed (`sim` token + `matches.manage`). State only moves forward
+  (upcoming → live → finished); finishing needs a winner and settles the match's bets (`SettlementService`, idempotent).
+- Local seed: the design's 8 demo matches (2 live), static. Re-running `db:seed` refreshes their start times.
+
+Get a token for casino-sim (shown once; `--revoke` replaces old ones):
+
+```sh
+php artisan sim:token
+```
 
 ## Esports data (PandaScore)
 

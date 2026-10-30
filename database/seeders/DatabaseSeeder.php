@@ -23,11 +23,14 @@ class DatabaseSeeder extends Seeder
         }
 
         // Local demo accounts, one per role. Password: "Password1!". Re-running resets them.
-        foreach (Role::cases() as $role) {
+        // The simulator account is created by `php artisan sim:token`, never with a password.
+        foreach (array_filter(Role::cases(), fn (Role $role) => $role !== Role::Simulator) as $role) {
             User::updateOrCreate(
                 ['email' => "{$role->value}@casino.test"],
                 ['name' => ucfirst($role->value).' Demo', 'password' => 'Password1!', 'email_verified_at' => now()],
             )->syncRoles([$role->value]);
         }
+
+        $this->call(FixtureSeeder::class);
     }
 }

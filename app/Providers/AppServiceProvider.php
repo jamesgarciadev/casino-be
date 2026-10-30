@@ -2,11 +2,16 @@
 
 namespace App\Providers;
 
+use App\Enums\BetStatus;
+use App\Enums\MatchState;
+use App\Enums\Side;
+use App\GraphQL\Types\BackedEnumType;
 use App\Models\Activity;
 use App\Policies\ActivityPolicy;
 use App\Services\PandaScore\PandaScoreClient;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
+use Nuwave\Lighthouse\Schema\TypeRegistry;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -27,5 +32,11 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         Gate::policy(Activity::class, ActivityPolicy::class);
+
+        $this->callAfterResolving(TypeRegistry::class, function (TypeRegistry $types) {
+            $types->register(new BackedEnumType(MatchState::class, 'Where a match is in its lifecycle. Bets are accepted until FINISHED.'));
+            $types->register(new BackedEnumType(Side::class, 'Team A or team B of a match.'));
+            $types->register(new BackedEnumType(BetStatus::class, 'PENDING until the match finishes, then WON or LOST.'));
+        });
     }
 }

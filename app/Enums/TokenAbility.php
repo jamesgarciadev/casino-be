@@ -10,4 +10,7 @@ enum TokenAbility: string
 {
     case Admin = 'admin';
     case Customer = 'customer';
+
+    /** casino-sim's feed token: may only create and update matches. */
+    case Sim = 'sim';
 }

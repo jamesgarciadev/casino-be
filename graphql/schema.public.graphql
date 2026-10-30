@@ -1,3 +1,20 @@
+"Where a match is in its lifecycle. Bets are accepted until FINISHED."
+enum MatchState {
+ UPCOMING
+ LIVE
+ FINISHED
+}
+"Team A or team B of a match."
+enum Side {
+ A
+ B
+}
+"PENDING until the match finishes, then WON or LOST."
+enum BetStatus {
+ PENDING
+ WON
+ LOST
+}
 type Query {
  "The currently authenticated user (any token scope)."
  me: User
@@ -13,6 +30,18 @@ type Query {
  ): EsportsMatchPage!
  "A single esports match by PandaScore id. Public."
  esportsMatch(id: ID!): EsportsMatch
+ "Bettable matches, live first, then by start time. Without `state`, finished matches are left out. Public."
+ matches(
+ state: MatchState
+ "A `Videogame.slug`, e.g. `cs-go`."
+ game: String
+ ): [Match!]!
+ "A bettable match. Public."
+ match(id: ID!): Match
+ "The signed-in customer's play-money wallet (opened with 1,000 CR on first use)."
+ wallet: Wallet!
+ "The signed-in customer's bets, newest first (latest 100)."
+ myBets: [Bet!]!
  "Staff: list users. Requires `users.view`."
  adminUsers(
  "Matches name or email."
@@ -40,6 +69,14 @@ type Mutation {
  adminLogin(input: LoginInput!): AuthPayload!
  "Revoke the token used for this request."
  logout: Boolean!
+ "Bet play-money credits on one side of a match. Odds are taken from the match at this moment."
+ placeBet(input: PlaceBetInput!): PlaceBetPayload!
+ "Add 500 play-money credits."
+ topUpWallet: Wallet!
+ "casino-sim: create a simulated match."
+ simCreateMatch(input: SimCreateMatchInput!): Match!
+ "casino-sim: update score, odds or state. Finishing a match (with a winner) settles its bets."
+ simUpdateMatch(id: ID!, input: SimUpdateMatchInput!): Match!
  "Owner: replace a user's role. Audit-logged."
  adminAssignRole(userId: ID!, role: Role!): User!
 }
@@ -159,6 +196,76 @@ type EsportsPageInfo {
 type EsportsMatchPage {
  data: [EsportsMatch!]!
  pageInfo: EsportsPageInfo!
+}
+type Match {
+ id: ID!
+ "PandaScore videogame slug, e.g. `cs-go`."
+ game: String!
+ gameName: String!
+ tournament: String!
+ teamA: String!
+ teamB: String!
+ teamAAcronym: String
+ teamBAcronym: String
+ scoreA: Int!
+ scoreB: Int!
+ "Decimal odds for team A. Simulated, not market odds."
+ oddsA: Float!
+ oddsB: Float!
+ startsAt: DateTime!
+ state: MatchState!
+ winner: Side
+ streamUrl: String
+}
+type Wallet {
+ "Whole play-money credits (CR). No cash value."
+ balance: Int!
+}
+type Bet {
+ id: ID!
+ match: Match!
+ side: Side!
+ stake: Int!
+ "Odds when the bet was placed."
+ odds: Float!
+ "stake × odds, rounded. Credited only if the bet is WON."
+ payout: Int!
+ status: BetStatus!
+ placedAt: DateTime!
+ settledAt: DateTime
+}
+type PlaceBetPayload {
+ bet: Bet!
+ wallet: Wallet!
+}
+input PlaceBetInput {
+ matchId: ID!
+ side: Side!
+ stake: Int!
+}
+input SimCreateMatchInput {
+ "PandaScore match id the matchup was taken from."
+ externalId: ID
+ game: String!
+ gameName: String!
+ tournament: String!
+ teamA: String!
+ teamB: String!
+ teamAAcronym: String
+ teamBAcronym: String
+ oddsA: Float!
+ oddsB: Float!
+ startsAt: DateTime!
+ state: MatchState
+ streamUrl: String
+}
+input SimUpdateMatchInput {
+ scoreA: Int
+ scoreB: Int
+ oddsA: Float
+ oddsB: Float
+ state: MatchState
+ winner: Side
 }
 "Information about pagination using a fully featured paginator."
 type PaginatorInfo {

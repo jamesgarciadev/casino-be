@@ -47,6 +47,22 @@ type Query {
     "A single esports match by PandaScore id. Public."
     esportsMatch(id: ID! @rules(apply: ["regex:/^[1-9][0-9]{0,9}$/"])): EsportsMatch
         @throttle(prefix: "esports", maxAttempts: 60, decayMinutes: 1)
+
+    "Bettable matches, live first, then by start time. Without `state`, finished matches are left out. Public."
+    matches(
+        state: MatchState
+        "A `Videogame.slug`, e.g. `cs-go`."
+        game: String @rules(apply: ["nullable", "regex:/^[a-z0-9-]{1,40}$/"])
+    ): [Match!]!
+
+    "A bettable match. Public."
+    match(id: ID! @eq): Match @find
+
+    "The signed-in customer's play-money wallet (opened with 1,000 CR on first use)."
+    wallet: Wallet! @guard @tokenCan(ability: "customer")
+
+    "The signed-in customer's bets, newest first (latest 100)."
+    myBets: [Bet!]! @guard @tokenCan(ability: "customer")
 }
 
 type Mutation {
@@ -61,6 +77,30 @@ type Mutation {
 
     "Revoke the token used for this request."
     logout: Boolean! @guard
+
+    "Bet play-money credits on one side of a match. Odds are taken from the match at this moment."
+    placeBet(input: PlaceBetInput! @spread): PlaceBetPayload!
+        @guard
+        @tokenCan(ability: "customer")
+        @throttle(prefix: "placeBet", maxAttempts: 30, decayMinutes: 1)
+
+    "Add 500 play-money credits."
+    topUpWallet: Wallet!
+        @guard
+        @tokenCan(ability: "customer")
+        @throttle(prefix: "topUpWallet", maxAttempts: 10, decayMinutes: 1)
+
+    "casino-sim: create a simulated match."
+    simCreateMatch(input: SimCreateMatchInput! @spread): Match!
+        @guard
+        @tokenCan(ability: "sim")
+        @canModel(ability: "manage", model: "App\\Models\\Fixture")
+
+    "casino-sim: update score, odds or state. Finishing a match (with a winner) settles its bets."
+    simUpdateMatch(id: ID! @rules(apply: ["exists:fixtures,id"]), input: SimUpdateMatchInput! @spread): Match!
+        @guard
+        @tokenCan(ability: "sim")
+        @canModel(ability: "manage", model: "App\\Models\\Fixture")
 
     "Owner: replace a user's role. Audit-logged."
     adminAssignRole(
@@ -204,4 +244,85 @@ type EsportsPageInfo {
 type EsportsMatchPage {
     data: [EsportsMatch!]!
     pageInfo: EsportsPageInfo!
+}
+
+# Betting (play money). `Match` is a bettable match stored in be: seeded from the design or played out by casino-sim.
+# It is unrelated to `EsportsMatch`, which is PandaScore data passed through read-only.
+# MatchState, Side and BetStatus are registered from PHP enums in AppServiceProvider.
+
+type Match @model(class: "App\\Models\\Fixture") {
+    id: ID!
+    "PandaScore videogame slug, e.g. `cs-go`."
+    game: String!
+    gameName: String! @rename(attribute: "game_name")
+    tournament: String!
+    teamA: String! @rename(attribute: "team_a")
+    teamB: String! @rename(attribute: "team_b")
+    teamAAcronym: String @rename(attribute: "team_a_acronym")
+    teamBAcronym: String @rename(attribute: "team_b_acronym")
+    scoreA: Int! @rename(attribute: "score_a")
+    scoreB: Int! @rename(attribute: "score_b")
+    "Decimal odds for team A. Simulated, not market odds."
+    oddsA: Float! @rename(attribute: "odds_a")
+    oddsB: Float! @rename(attribute: "odds_b")
+    startsAt: DateTime! @rename(attribute: "starts_at")
+    state: MatchState!
+    winner: Side
+    streamUrl: String @rename(attribute: "stream_url")
+}
+
+type Wallet {
+    "Whole play-money credits (CR). No cash value."
+    balance: Int!
+}
+
+type Bet {
+    id: ID!
+    match: Match! @belongsTo(relation: "fixture")
+    side: Side!
+    stake: Int!
+    "Odds when the bet was placed."
+    odds: Float!
+    "stake × odds, rounded. Credited only if the bet is WON."
+    payout: Int!
+    status: BetStatus!
+    placedAt: DateTime! @rename(attribute: "created_at")
+    settledAt: DateTime @rename(attribute: "settled_at")
+}
+
+type PlaceBetPayload {
+    bet: Bet!
+    wallet: Wallet!
+}
+
+input PlaceBetInput {
+    matchId: ID! @rules(apply: ["integer"])
+    side: Side!
+    stake: Int! @rules(apply: ["integer", "min:1", "max:1000000"])
+}
+
+input SimCreateMatchInput {
+    "PandaScore match id the matchup was taken from."
+    externalId: ID @rename(attribute: "external_id") @rules(apply: ["nullable", "integer"])
+    game: String! @rules(apply: ["regex:/^[a-z0-9-]{1,40}$/"])
+    gameName: String! @rename(attribute: "game_name") @rules(apply: ["max:80"])
+    tournament: String! @rules(apply: ["max:255"])
+    teamA: String! @rename(attribute: "team_a") @rules(apply: ["max:255"])
+    teamB: String! @rename(attribute: "team_b") @rules(apply: ["max:255", "different:teamA"])
+    teamAAcronym: String @rename(attribute: "team_a_acronym") @rules(apply: ["nullable", "max:20"])
+    teamBAcronym: String @rename(attribute: "team_b_acronym") @rules(apply: ["nullable", "max:20"])
+    oddsA: Float! @rename(attribute: "odds_a") @rules(apply: ["numeric", "min:1.01", "max:999"])
+    oddsB: Float! @rename(attribute: "odds_b") @rules(apply: ["numeric", "min:1.01", "max:999"])
+    startsAt: DateTime! @rename(attribute: "starts_at")
+    state: MatchState
+    streamUrl: String @rename(attribute: "stream_url") @rules(apply: ["nullable", "url", "max:255"])
+}
+
+input SimUpdateMatchInput {
+    scoreA: Int @rename(attribute: "score_a") @rules(apply: ["nullable", "integer", "min:0", "max:999"])
+    scoreB: Int @rename(attribute: "score_b") @rules(apply: ["nullable", "integer", "min:0", "max:999"])
+    oddsA: Float @rename(attribute: "odds_a") @rules(apply: ["nullable", "numeric", "min:1.01", "max:999"])
+    oddsB: Float @rename(attribute: "odds_b") @rules(apply: ["nullable", "numeric", "min:1.01", "max:999"])
+    state: MatchState
+    winner: Side
 }

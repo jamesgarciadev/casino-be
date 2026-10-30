@@ -9,6 +9,9 @@ enum Role: string
     case Admin = 'admin';
     case Owner = 'owner';
 
+    /** Service account used by casino-sim. Cannot sign in to web or fe; only holds `sim` tokens. */
+    case Simulator = 'simulator';
+
     /**
      * Roles allowed to sign in to the admin console (fe).
      *
@@ -29,6 +32,7 @@ enum Role: string
             self::Moderator => [Permission::UsersView],
             self::Admin => [Permission::UsersView, Permission::ActivityView],
             self::Owner => Permission::cases(),
+            self::Simulator => [Permission::MatchesManage],
         };
     }
 }

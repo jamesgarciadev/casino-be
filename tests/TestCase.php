@@ -34,6 +34,13 @@ abstract class TestCase extends BaseTestCase
         return $user->createToken('web', [TokenAbility::Customer->value], $expiresAt)->plainTextToken;
     }
 
+    protected function simToken(?User $user = null): string
+    {
+        $user ??= $this->userWithRole(Role::Simulator);
+
+        return $user->createToken('casino-sim', [TokenAbility::Sim->value])->plainTextToken;
+    }
+
     /** Sanctum caches the resolved user per guard, so reset it between requests that switch tokens. */
     protected function forgetAuth(): void
     {
