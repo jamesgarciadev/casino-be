@@ -8,9 +8,11 @@ use App\Enums\Side;
 use App\Exceptions\RuleViolation;
 use App\Models\Fixture;
 use Illuminate\Support\Facades\DB;
+use Nuwave\Lighthouse\Execution\Utils\Subscription;
 
 /**
- * Writes from casino-sim. The simulator decides scores and odds; be enforces the lifecycle and settles bets.
+ * Writes from casino-sim. The simulator decides scores and odds; be enforces the lifecycle, settles bets
+ * and pushes every change to `matchUpdated` subscribers (via Reverb; failures are logged, never thrown).
  */
 class MatchFeedService
 {
@@ -27,7 +29,7 @@ class MatchFeedService
             throw new RuleViolation('A new match cannot start as finished.');
         }
 
-        return Fixture::create([...$attributes, 'source' => MatchSource::Sim, 'state' => $state])->refresh();
+        return $this->broadcast(Fixture::create([...$attributes, 'source' => MatchSource::Sim, 'state' => $state])->refresh());
     }
 
     /**
@@ -35,7 +37,7 @@ class MatchFeedService
      */
     public function update(Fixture $fixture, array $changes): Fixture
     {
-        return DB::transaction(function () use ($fixture, $changes) {
+        $fixture = DB::transaction(function () use ($fixture, $changes) {
             $fixture = Fixture::lockForUpdate()->findOrFail($fixture->id);
 
             if ($fixture->state === MatchState::Finished) {
@@ -62,5 +64,15 @@ class MatchFeedService
 
             return $fixture;
         });
+
+        return $this->broadcast($fixture);
+    }
+
+    /** Broadcast after the transaction has committed, so subscribers never see a rolled-back state. */
+    private function broadcast(Fixture $fixture): Fixture
+    {
+        Subscription::broadcast('matchUpdated', $fixture);
+
+        return $fixture;
     }
 }

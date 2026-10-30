@@ -9,8 +9,10 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for how this fits with `casino-fe` and `c
 docker compose up -d --wait      # MySQL (casino) on 3306, Redis on 6379
 composer install
 cp .env.example .env && php artisan key:generate
+php artisan reverb:install       # first time only: generates REVERB_APP_ID/KEY/SECRET
 php artisan migrate --seed
 php artisan serve                # http://localhost:8000/graphql
+php artisan reverb:start         # websockets on :6001, for GraphQL subscriptions (separate terminal)
 ```
 
 GraphiQL (dev only): http://localhost:8000/graphiql
@@ -57,6 +59,21 @@ Get a token for casino-sim (shown once; `--revoke` replaces old ones):
 ```sh
 php artisan sim:token
 ```
+
+## Live updates (GraphQL subscriptions over Reverb)
+
+`subscription { matchUpdated(game) { ... } }` pushes a match every time casino-sim creates or updates it. Reverb is
+Laravel's self-hosted websocket server (no cloud service). How a client subscribes:
+
+1. POST the subscription to `/graphql` like any query. The response carries
+   `extensions.lighthouse_subscriptions.channel` (a `private-lighthouse-…` channel).
+2. Connect to Reverb with a Pusher client (`ws://localhost:6001`, app key `REVERB_APP_KEY`), authorising the channel at
+   `POST /graphql/subscriptions/auth`.
+3. Each push arrives as a `lighthouse-subscription` event with the query result.
+
+Only public match data goes over sockets. Wallets and bets are re-queried when a pushed match is `FINISHED`.
+Broadcast failures (e.g. Reverb not running) are logged and never fail the sim's mutation. Tests use the log
+broadcaster and array storage (see `phpunit.xml`).
 
 ## Esports data (PandaScore)
 
@@ -109,4 +126,4 @@ port 8100 / 8101 against a separate `casino_e2e_*` database.
 ## Not yet set up
 
 - **Horizon** needs `ext-pcntl`, which isn't available on Windows. Add it when the API is containerized.
-- **Reverb** (GraphQL subscriptions): add with the first real-time feature.
+  Until then broadcasts run inline (`LIGHTHOUSE_QUEUE_BROADCASTS=false`).

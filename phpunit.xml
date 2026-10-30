@@ -32,6 +32,9 @@
         <env name="DB_DATABASE" value=":memory:"/>
         <env name="DB_URL" value=""/>
         <env name="LIGHTHOUSE_SCHEMA_CACHE_ENABLE" value="false"/>
+        <env name="LIGHTHOUSE_BROADCASTER" value="log"/>
+        <env name="LIGHTHOUSE_QUEUE_BROADCASTS" value="false"/>
+        <env name="LIGHTHOUSE_SUBSCRIPTION_STORAGE" value="array"/>
         <env name="MAIL_MAILER" value="array"/>
         <env name="QUEUE_CONNECTION" value="sync"/>
         <env name="SESSION_DRIVER" value="array"/>

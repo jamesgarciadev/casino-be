@@ -112,6 +112,14 @@ type Mutation {
         @canFind(ability: "assignRole", find: "userId", model: "App\\Models\\User")
 }
 
+type Subscription {
+    "Pushed whenever casino-sim creates or updates a match (score, odds, state). Public; delivered through Reverb."
+    matchUpdated(
+        "Only matches of this `Videogame.slug`."
+        game: String
+    ): Match
+}
+
 input RegisterInput {
     name: String! @rules(apply: ["required", "string", "min:2", "max:255"])
     email: String! @rules(apply: ["required", "email", "max:255", "unique:users,email"])
