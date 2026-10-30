@@ -61,8 +61,15 @@ type Query {
     "The signed-in customer's play-money wallet (opened with 1,000 CR on first use)."
     wallet: Wallet! @guard @tokenCan(ability: "customer")
 
-    "The signed-in customer's bets, newest first (latest 100)."
-    myBets: [Bet!]! @guard @tokenCan(ability: "customer")
+    """
+    The signed-in customer's bets, newest first. open: true for PENDING bets only, false for settled (WON or LOST) only.
+    Page with first (1-100, default 100) and before: the id of the last bet already loaded.
+    """
+    myBets(
+        open: Boolean
+        first: Int = 100 @rules(apply: ["integer", "min:1", "max:100"])
+        before: ID @rules(apply: ["nullable", "integer"])
+    ): [Bet!]! @guard @tokenCan(ability: "customer")
 }
 
 type Mutation {

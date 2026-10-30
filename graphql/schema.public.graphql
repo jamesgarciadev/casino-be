@@ -45,8 +45,11 @@ type Query {
  match(id: ID!): Match
  "The signed-in customer's play-money wallet (opened with 1,000 CR on first use)."
  wallet: Wallet!
- "The signed-in customer's bets, newest first (latest 100)."
- myBets: [Bet!]!
+ """
+ The signed-in customer's bets, newest first. open: true for PENDING bets only, false for settled (WON or LOST) only.
+ Page with first (1-100, default 100) and before: the id of the last bet already loaded.
+ """
+ myBets(open: Boolean, first: Int = 100, before: ID): [Bet!]!
  "Staff: list users. Requires `users.view`."
  adminUsers(
  "Matches name or email."

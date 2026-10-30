@@ -241,4 +241,38 @@ class BettingTest extends TestCase
                 ['id' => (string) $first->id, 'status' => 'PENDING'],
             ]);
     }
+
+    public function test_my_bets_can_be_split_into_open_and_settled(): void
+    {
+        $open = Bet::factory()->for($this->customer)->create();
+        $won = Bet::factory()->for($this->customer)->create(['status' => BetStatus::Won]);
+        $lost = Bet::factory()->for($this->customer)->create(['status' => BetStatus::Lost]);
+        $token = $this->customerToken($this->customer);
+
+        $this->withToken($token)->graphQL('{ myBets(open: true) { id } }')
+            ->assertJsonPath('data.myBets', [['id' => (string) $open->id]]);
+
+        $this->withToken($token)->graphQL('{ myBets(open: false) { id } }')
+            ->assertJsonPath('data.myBets', [['id' => (string) $lost->id], ['id' => (string) $won->id]]);
+    }
+
+    public function test_my_bets_pages_newest_first_from_a_cursor(): void
+    {
+        $ids = Bet::factory()->for($this->customer)->count(5)->create()->pluck('id')->reverse()->values();
+        $token = $this->customerToken($this->customer);
+        $page = fn (?string $before) => $this->withToken($token)
+            ->graphQL('query ($before: ID) { myBets(open: true, first: 2, before: $before) { id } }', ['before' => $before])
+            ->json('data.myBets.*.id');
+
+        $this->assertSame([(string) $ids[0], (string) $ids[1]], $page(null));
+        $this->assertSame([(string) $ids[2], (string) $ids[3]], $page((string) $ids[1]));
+        $this->assertSame([(string) $ids[4]], $page((string) $ids[3]));
+    }
+
+    public function test_my_bets_page_size_is_capped(): void
+    {
+        $this->withToken($this->customerToken($this->customer))
+            ->graphQL('{ myBets(first: 101) { id } }')
+            ->assertGraphQLErrorMessage('Validation failed for the field [myBets].');
+    }
 }
