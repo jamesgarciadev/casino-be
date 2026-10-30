@@ -101,6 +101,18 @@ class AdminAuthorizationTest extends TestCase
         $this->assertSame(['owner'], $owner->fresh()->roleNames());
     }
 
+    public function test_the_simulator_account_role_cannot_be_changed(): void
+    {
+        $owner = $this->userWithRole(Role::Owner);
+        $simulator = $this->userWithRole(Role::Simulator);
+
+        $this->withToken($this->adminToken($owner))
+            ->graphQL(self::ASSIGN_ROLE, ['id' => $simulator->id, 'role' => 'OWNER'])
+            ->assertGraphQLErrorMessage('This action is unauthorized.');
+
+        $this->assertSame(['simulator'], $simulator->fresh()->roleNames());
+    }
+
     public function test_assigning_a_role_to_an_unknown_user_fails_without_side_effects(): void
     {
         $this->withToken($this->adminToken($this->userWithRole(Role::Owner)))

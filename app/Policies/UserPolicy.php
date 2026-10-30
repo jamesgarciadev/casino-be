@@ -19,6 +19,11 @@ class UserPolicy
             return false;
         }
 
+        // casino-sim's service account keeps its role; turning it into a player or staff would let a sim token act as one.
+        if ($target->hasRole(Role::Simulator->value)) {
+            return false;
+        }
+
         // Owners cannot demote themselves and lock the console out.
         return ! ($actor->is($target) && $actor->hasRole(Role::Owner->value));
     }
