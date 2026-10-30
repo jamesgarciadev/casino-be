@@ -15,7 +15,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * A stake on one selection (single) or on several selections from different matches (combo).
  * `odds` is the total: the product of the selections' odds.
  */
-#[Fillable(['user_id', 'type', 'stake', 'odds', 'payout', 'status', 'settled_at'])]
+#[Fillable(['user_id', 'type', 'stake', 'odds', 'payout', 'cash_out', 'status', 'settled_at'])]
 class Bet extends Model
 {
     /** Keeps stake x odds well inside 64-bit integers however many picks a combo has. */
@@ -34,6 +34,7 @@ class Bet extends Model
             'status' => BetStatus::class,
             'stake' => 'integer',
             'payout' => 'integer',
+            'cash_out' => 'integer',
             'odds' => 'decimal:2',
             'settled_at' => 'datetime',
         ];
@@ -70,6 +71,18 @@ class Bet extends Model
         }
 
         return sprintf('%d.%02d', intdiv($cents, 100), $cents % 100);
+    }
+
+    /**
+     * What a single is worth now: stake x placed odds / current odds for the same side, rounded half up to whole
+     * credits in integers. The current odds already carry the house margin, so no fee is taken on top.
+     */
+    public static function cashOutValue(int $stake, string $placedOdds, string $currentOdds): int
+    {
+        $placed = (int) round(((float) $placedOdds) * 100);
+        $current = (int) round(((float) $currentOdds) * 100);
+
+        return intdiv(2 * $stake * $placed + $current, 2 * $current);
     }
 
     /**

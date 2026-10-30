@@ -45,7 +45,7 @@ is rejected even if its user happens to be staff.
 
 - `matches(state, game)`, `match(id)`: public. Live first, then by start time. Stored as `App\Models\Fixture`
   (exposed as `Match`; `match` is reserved in PHP). Unrelated to `EsportsMatch`, which is raw PandaScore data.
-- `wallet`, `myBets`, `placeBet`, `placeComboBet`, `topUpWallet`: customer token only. Wallets open with 1,000 CR (on registration, or on
+- `wallet`, `myBets`, `placeBet`, `placeComboBet`, `cashOutBet`, `topUpWallet`: customer token only. Wallets open with 1,000 CR (on registration, or on
   first use for older accounts); top-up adds 500.
 - A bet is a stake on one or more `selections` (table `bet_selections`): `placeBet` makes a SINGLE, `placeComboBet` a
   COMBO (parlay) of two or more picks, each from a different match; picking both sides of one match is refused. Both
@@ -54,7 +54,14 @@ is rejected even if its user happens to be staff.
 - Total odds multiply the picks' odds in whole cents, rounding half up after each pick, capped at 1,000,000
   (`Bet::totalOdds`). Payout is `stake × total odds` rounded half up to whole credits (`Bet::payoutFor`).
 - Settlement marks each pick on the finished match WON or LOST. A bet is LOST as soon as one pick loses and WON (paid)
-  once every pick has won; until then a combo stays PENDING. Seeded demo matches never finish, so combos that include
+  once every pick has won; until then a combo stays PENDING.
+- `cashOutBet` withdraws an open single (not a combo) for `stake × placed odds ÷ current odds`, rounded half up
+  (`Bet::cashOutValue`, no fee: the odds already carry the margin). The client sends the value it showed; a lower
+  current value is refused ("Cash-out value changed to N CR."), an equal or higher one is paid. The bet and its pick
+  become CASHED_OUT, so settlement skips them. `CashOutService` locks fixture → bet → wallet, the same order as a feed
+  update that settles, so the two can't both pay.
+- `myBets(open, first, before)`: `open` true/false splits pending from settled (WON, LOST, CASHED_OUT); `first` and
+  `before` (last id held) page newest first by id. Seeded demo matches never finish, so combos that include
   one stay pending.
 - `simCreateMatch`, `simUpdateMatch`: casino-sim's feed (`sim` token + `matches.manage`). State only moves forward
   (upcoming → live → finished); finishing needs a winner and settles the match's bets (`SettlementService`, idempotent).

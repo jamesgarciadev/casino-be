@@ -97,6 +97,12 @@ type Mutation {
         @tokenCan(ability: "customer")
         @throttle(prefix: "placeBet", maxAttempts: 30, decayMinutes: 1)
 
+    "Withdraw an open single for its value at the match's current odds (stake × placed odds ÷ current odds). expected is the value the player was shown; a lower current value is refused."
+    cashOutBet(input: CashOutBetInput! @spread): PlaceBetPayload!
+        @guard
+        @tokenCan(ability: "customer")
+        @throttle(prefix: "cashOutBet", maxAttempts: 30, decayMinutes: 1)
+
     "Add 500 play-money credits."
     topUpWallet: Wallet!
         @guard
@@ -307,7 +313,9 @@ type Bet {
     odds: Float!
     "stake × odds, rounded. Credited only if the bet is WON."
     payout: Int!
-    "WON once every selection has won; LOST as soon as one selection loses."
+    "Credits paid when the bet was CASHED_OUT."
+    cashOut: Int @rename(attribute: "cash_out")
+    "WON once every selection has won; LOST as soon as one selection loses; CASHED_OUT if a single was withdrawn."
     status: BetStatus!
     placedAt: DateTime! @rename(attribute: "created_at")
     settledAt: DateTime @rename(attribute: "settled_at")
@@ -333,6 +341,12 @@ input PlaceBetInput {
     matchId: ID! @rules(apply: ["integer"])
     side: Side!
     stake: Int! @rules(apply: ["integer", "min:1", "max:1000000"])
+}
+
+input CashOutBetInput {
+    betId: ID! @rules(apply: ["integer"])
+    "The cash-out value the player was shown, in whole credits."
+    expected: Int! @rules(apply: ["integer", "min:0"])
 }
 
 input PlaceComboBetInput {
