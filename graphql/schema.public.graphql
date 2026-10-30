@@ -15,6 +15,11 @@ enum BetStatus {
  WON
  LOST
 }
+"SINGLE backs one match; COMBO backs several different matches and wins only if every pick wins."
+enum BetType {
+ SINGLE
+ COMBO
+}
 type Query {
  "The currently authenticated user (any token scope)."
  me: User
@@ -71,6 +76,8 @@ type Mutation {
  logout: Boolean!
  "Bet play-money credits on one side of a match. Odds are taken from the match at this moment."
  placeBet(input: PlaceBetInput!): PlaceBetPayload!
+ "Bet on two or more picks from different matches (a parlay). Total odds are the product of the picks' odds at this moment; it wins only if every pick wins."
+ placeComboBet(input: PlaceComboBetInput!): PlaceBetPayload!
  "Add 500 play-money credits."
  topUpWallet: Wallet!
  "casino-sim: create a simulated match."
@@ -230,16 +237,28 @@ type Wallet {
 }
 type Bet {
  id: ID!
- match: Match!
- side: Side!
+ type: BetType!
+ "One pick for a SINGLE, one per match for a COMBO, in the order they were picked."
+ selections: [BetSelection!]!
  stake: Int!
- "Odds when the bet was placed."
+ "Total odds when the bet was placed: the product of the selections' odds, rounded to cents after each pick."
  odds: Float!
  "stake × odds, rounded. Credited only if the bet is WON."
  payout: Int!
+ "WON once every selection has won; LOST as soon as one selection loses."
  status: BetStatus!
  placedAt: DateTime!
  settledAt: DateTime
+}
+"One pick of a bet."
+type BetSelection {
+ id: ID!
+ match: Match!
+ side: Side!
+ "Odds for this pick when the bet was placed."
+ odds: Float!
+ "PENDING until its match finishes."
+ status: BetStatus!
 }
 type PlaceBetPayload {
  bet: Bet!
@@ -249,6 +268,15 @@ input PlaceBetInput {
  matchId: ID!
  side: Side!
  stake: Int!
+}
+input PlaceComboBetInput {
+ "At least two picks, each from a different match."
+ selections: [BetSelectionInput!]!
+ stake: Int!
+}
+input BetSelectionInput {
+ matchId: ID!
+ side: Side!
 }
 input SimCreateMatchInput {
  "PandaScore match id the matchup was taken from."

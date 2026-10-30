@@ -3,6 +3,7 @@
 namespace App\Providers;
 
 use App\Enums\BetStatus;
+use App\Enums\BetType;
 use App\Enums\MatchState;
 use App\Enums\Side;
 use App\GraphQL\TolerantContextSerializer;
@@ -42,6 +43,7 @@ class AppServiceProvider extends ServiceProvider
             $types->register(new BackedEnumType(MatchState::class, 'Where a match is in its lifecycle. Bets are accepted until FINISHED.'));
             $types->register(new BackedEnumType(Side::class, 'Team A or team B of a match.'));
             $types->register(new BackedEnumType(BetStatus::class, 'PENDING until the match finishes, then WON or LOST.'));
+            $types->register(new BackedEnumType(BetType::class, 'SINGLE backs one match; COMBO backs several different matches and wins only if every pick wins.'));
         });
     }
 }

@@ -41,11 +41,11 @@ class Fixture extends Model
     }
 
     /**
-     * @return HasMany<Bet, $this>
+     * @return HasMany<BetSelection, $this>
      */
-    public function bets(): HasMany
+    public function betSelections(): HasMany
     {
-        return $this->hasMany(Bet::class);
+        return $this->hasMany(BetSelection::class);
     }
 
     public function oddsFor(Side $side): string

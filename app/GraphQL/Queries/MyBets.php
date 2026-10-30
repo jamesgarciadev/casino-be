@@ -15,6 +15,6 @@ final readonly class MyBets
      */
     public function __invoke(null $_, array $args, GraphQLContext $context): Collection
     {
-        return $context->user()->bets()->with('fixture')->latest()->latest('id')->limit(self::LIMIT)->get();
+        return $context->user()->bets()->with('selections.fixture')->latest()->latest('id')->limit(self::LIMIT)->get();
     }
 }

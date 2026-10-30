@@ -45,11 +45,17 @@ is rejected even if its user happens to be staff.
 
 - `matches(state, game)`, `match(id)`: public. Live first, then by start time. Stored as `App\Models\Fixture`
   (exposed as `Match`; `match` is reserved in PHP). Unrelated to `EsportsMatch`, which is raw PandaScore data.
-- `wallet`, `myBets`, `placeBet`, `topUpWallet`: customer token only. Wallets open with 1,000 CR (on registration, or on
+- `wallet`, `myBets`, `placeBet`, `placeComboBet`, `topUpWallet`: customer token only. Wallets open with 1,000 CR (on registration, or on
   first use for older accounts); top-up adds 500.
-- `placeBet` runs in one transaction with the wallet and match rows locked. Odds are read from the match, never the
-  client, and stored on the bet. Bets are accepted while a match is upcoming or live, and rejected once it is finished.
-- Payout is `stake × odds` rounded half up to whole credits, computed in integers (`Bet::payoutFor`).
+- A bet is a stake on one or more `selections` (table `bet_selections`): `placeBet` makes a SINGLE, `placeComboBet` a
+  COMBO (parlay) of two or more picks, each from a different match; picking both sides of one match is refused. Both
+  run in one transaction with the wallet and match rows locked. Odds are read from the matches, never the client, and
+  stored on each selection. Picks are accepted while a match is upcoming or live; a combo with any finished match is refused whole.
+- Total odds multiply the picks' odds in whole cents, rounding half up after each pick, capped at 1,000,000
+  (`Bet::totalOdds`). Payout is `stake × total odds` rounded half up to whole credits (`Bet::payoutFor`).
+- Settlement marks each pick on the finished match WON or LOST. A bet is LOST as soon as one pick loses and WON (paid)
+  once every pick has won; until then a combo stays PENDING. Seeded demo matches never finish, so combos that include
+  one stay pending.
 - `simCreateMatch`, `simUpdateMatch`: casino-sim's feed (`sim` token + `matches.manage`). State only moves forward
   (upcoming → live → finished); finishing needs a winner and settles the match's bets (`SettlementService`, idempotent).
 - Local seed: the design's 8 demo matches (2 live), static. Re-running `db:seed` refreshes their start times.

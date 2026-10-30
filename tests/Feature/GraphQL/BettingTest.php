@@ -5,6 +5,7 @@ namespace Tests\Feature\GraphQL;
 use App\Enums\BetStatus;
 use App\Enums\Role;
 use App\Models\Bet;
+use App\Models\BetSelection;
 use App\Models\Fixture;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -20,7 +21,16 @@ class BettingTest extends TestCase
     private const PLACE_BET = /** @lang GraphQL */ '
         mutation ($matchId: ID!, $side: Side!, $stake: Int!) {
             placeBet(input: { matchId: $matchId, side: $side, stake: $stake }) {
-                bet { side stake odds payout status match { teamA } }
+                bet { type stake odds payout status selections { side odds status match { teamA } } }
+                wallet { balance }
+            }
+        }
+    ';
+
+    private const PLACE_COMBO = /** @lang GraphQL */ '
+        mutation ($selections: [BetSelectionInput!]!, $stake: Int!) {
+            placeComboBet(input: { selections: $selections, stake: $stake }) {
+                bet { type stake odds payout status selections { side odds match { teamA } } }
                 wallet { balance }
             }
         }
@@ -64,13 +74,86 @@ class BettingTest extends TestCase
         $this->placeBet($fixture, 'A', 250)
             ->assertJsonPath('errors', null)
             ->assertJsonPath('data.placeBet', [
-                'bet' => ['side' => 'A', 'stake' => 250, 'odds' => 1.85, 'payout' => 463, 'status' => 'PENDING', 'match' => ['teamA' => 'NAVI']],
+                'bet' => [
+                    'type' => 'SINGLE', 'stake' => 250, 'odds' => 1.85, 'payout' => 463, 'status' => 'PENDING',
+                    'selections' => [['side' => 'A', 'odds' => 1.85, 'status' => 'PENDING', 'match' => ['teamA' => 'NAVI']]],
+                ],
                 'wallet' => ['balance' => 750],
             ]);
 
         // Later odds moves don't change an existing bet.
         $fixture->update(['odds_a' => '3.00']);
         $this->assertSame('1.85', Bet::sole()->odds);
+        $this->assertSame('1.85', BetSelection::sole()->odds);
+    }
+
+    /**
+     * @param  list<array{matchId: int, side: string}>  $selections
+     */
+    private function placeCombo(array $selections, int $stake): TestResponse
+    {
+        return $this->withToken($this->customerToken($this->customer))
+            ->graphQL(self::PLACE_COMBO, ['selections' => $selections, 'stake' => $stake]);
+    }
+
+    public function test_a_combo_multiplies_the_odds_of_picks_from_different_matches(): void
+    {
+        $navi = Fixture::factory()->create(['team_a' => 'NAVI', 'odds_a' => '1.85']);
+        $t1 = Fixture::factory()->live()->create(['team_a' => 'T1', 'odds_b' => '2.10']);
+        $prx = Fixture::factory()->create(['team_a' => 'PRX', 'odds_a' => '1.50']);
+
+        // 1.85 x 2.10 = 3.885 -> 3.89, x 1.50 = 5.835 -> 5.84
+        $this->placeCombo([
+            ['matchId' => $navi->id, 'side' => 'A'],
+            ['matchId' => $t1->id, 'side' => 'B'],
+            ['matchId' => $prx->id, 'side' => 'A'],
+        ], 100)
+            ->assertJsonPath('errors', null)
+            ->assertJsonPath('data.placeComboBet', [
+                'bet' => [
+                    'type' => 'COMBO', 'stake' => 100, 'odds' => 5.84, 'payout' => 584, 'status' => 'PENDING',
+                    'selections' => [
+                        ['side' => 'A', 'odds' => 1.85, 'match' => ['teamA' => 'NAVI']],
+                        ['side' => 'B', 'odds' => 2.1, 'match' => ['teamA' => 'T1']],
+                        ['side' => 'A', 'odds' => 1.5, 'match' => ['teamA' => 'PRX']],
+                    ],
+                ],
+                'wallet' => ['balance' => 900],
+            ]);
+    }
+
+    public function test_a_combo_cannot_back_the_same_match_twice(): void
+    {
+        $fixture = Fixture::factory()->create();
+
+        $this->placeCombo([['matchId' => $fixture->id, 'side' => 'A'], ['matchId' => $fixture->id, 'side' => 'B']], 100)
+            ->assertGraphQLErrorMessage('A combo can only include one pick per match.');
+
+        $this->assertDatabaseCount('bets', 0);
+    }
+
+    public function test_a_combo_needs_at_least_two_picks(): void
+    {
+        $this->placeCombo([['matchId' => Fixture::factory()->create()->id, 'side' => 'A']], 100)
+            ->assertGraphQLErrorMessage('Validation failed for the field [placeComboBet].');
+    }
+
+    public function test_a_combo_with_a_finished_match_is_refused_whole(): void
+    {
+        $open = Fixture::factory()->create();
+        $finished = Fixture::factory()->finished()->create(['team_a' => 'NAVI', 'team_b' => 'G2']);
+
+        $this->placeCombo([['matchId' => $open->id, 'side' => 'A'], ['matchId' => $finished->id, 'side' => 'A']], 100)
+            ->assertGraphQLErrorMessage('Betting is closed for NAVI vs G2.');
+
+        $this->assertDatabaseCount('bets', 0);
+        $this->assertDatabaseCount('bet_selections', 0);
+    }
+
+    public function test_a_combo_with_an_unknown_match_is_refused(): void
+    {
+        $this->placeCombo([['matchId' => Fixture::factory()->create()->id, 'side' => 'A'], ['matchId' => 999, 'side' => 'A']], 100)
+            ->assertGraphQLErrorMessage('Match not found.');
     }
 
     public function test_bets_are_accepted_while_a_match_is_live(): void

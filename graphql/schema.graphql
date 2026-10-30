@@ -84,6 +84,12 @@ type Mutation {
         @tokenCan(ability: "customer")
         @throttle(prefix: "placeBet", maxAttempts: 30, decayMinutes: 1)
 
+    "Bet on two or more picks from different matches (a parlay). Total odds are the product of the picks' odds at this moment; it wins only if every pick wins."
+    placeComboBet(input: PlaceComboBetInput! @spread): PlaceBetPayload!
+        @guard
+        @tokenCan(ability: "customer")
+        @throttle(prefix: "placeBet", maxAttempts: 30, decayMinutes: 1)
+
     "Add 500 play-money credits."
     topUpWallet: Wallet!
         @guard
@@ -286,16 +292,29 @@ type Wallet {
 
 type Bet {
     id: ID!
-    match: Match! @belongsTo(relation: "fixture")
-    side: Side!
+    type: BetType!
+    "One pick for a SINGLE, one per match for a COMBO, in the order they were picked."
+    selections: [BetSelection!]! @hasMany
     stake: Int!
-    "Odds when the bet was placed."
+    "Total odds when the bet was placed: the product of the selections' odds, rounded to cents after each pick."
     odds: Float!
     "stake × odds, rounded. Credited only if the bet is WON."
     payout: Int!
+    "WON once every selection has won; LOST as soon as one selection loses."
     status: BetStatus!
     placedAt: DateTime! @rename(attribute: "created_at")
     settledAt: DateTime @rename(attribute: "settled_at")
+}
+
+"One pick of a bet."
+type BetSelection {
+    id: ID!
+    match: Match! @belongsTo(relation: "fixture")
+    side: Side!
+    "Odds for this pick when the bet was placed."
+    odds: Float!
+    "PENDING until its match finishes."
+    status: BetStatus!
 }
 
 type PlaceBetPayload {
@@ -307,6 +326,17 @@ input PlaceBetInput {
     matchId: ID! @rules(apply: ["integer"])
     side: Side!
     stake: Int! @rules(apply: ["integer", "min:1", "max:1000000"])
+}
+
+input PlaceComboBetInput {
+    "At least two picks, each from a different match."
+    selections: [BetSelectionInput!]! @rulesForArray(apply: ["min:2"])
+    stake: Int! @rules(apply: ["integer", "min:1", "max:1000000"])
+}
+
+input BetSelectionInput {
+    matchId: ID! @rules(apply: ["integer"])
+    side: Side!
 }
 
 input SimCreateMatchInput {
