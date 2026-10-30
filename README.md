@@ -72,6 +72,11 @@ Laravel's self-hosted websocket server (no cloud service). How a client subscrib
 3. Each push arrives as a `lighthouse-subscription` event with the query result.
 
 Only public match data goes over sockets. Wallets and bets are re-queried when a pushed match is `FINISHED`.
+
+Each subscription is stored (Redis) and pushed to individually, so every update costs one Reverb call per open
+subscription. Subscriptions expire after `LIGHTHOUSE_SUBSCRIPTION_STORAGE_TTL` (1 hour) and clients re-subscribe
+before that, which keeps closed tabs from piling up. For many concurrent viewers, switch the public feed to a single
+broadcast channel (or queue broadcasts) rather than per-subscriber pushes.
 Broadcast failures (e.g. Reverb not running) are logged and never fail the sim's mutation. Tests use the log
 broadcaster and array storage (see `phpunit.xml`).
 
