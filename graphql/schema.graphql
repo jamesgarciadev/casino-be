@@ -31,6 +31,22 @@ type Query {
         @canModel(ability: "viewAny", model: "App\\Models\\Activity")
         @paginate(defaultCount: 20, maxCount: 100)
         @orderBy(column: "id", direction: DESC)
+
+    "Esports titles PandaScore covers. Public."
+    videogames: [Videogame!]! @throttle(prefix: "esports", maxAttempts: 60, decayMinutes: 1)
+
+    "Esports matches from PandaScore. Cached for 15s (running), 1 min (upcoming) or 10 min (past). Public."
+    esportsMatches(
+        window: MatchWindow! = UPCOMING
+        "A `Videogame.slug`, e.g. `cs-go`. Unknown slugs return no matches."
+        game: String @rules(apply: ["nullable", "regex:/^[a-z0-9-]{1,40}$/"])
+        page: Int! = 1 @rules(apply: ["integer", "min:1", "max:1000"])
+        perPage: Int! = 20 @rules(apply: ["integer", "min:1", "max:50"])
+    ): EsportsMatchPage! @throttle(prefix: "esports", maxAttempts: 60, decayMinutes: 1)
+
+    "A single esports match by PandaScore id. Public."
+    esportsMatch(id: ID! @rules(apply: ["regex:/^[1-9][0-9]{0,9}$/"])): EsportsMatch
+        @throttle(prefix: "esports", maxAttempts: 60, decayMinutes: 1)
 }
 
 type Mutation {
@@ -102,4 +118,90 @@ type Activity {
     "JSON-encoded properties, including before/after state for admin changes."
     properties: String @method(name: "propertiesJson")
     createdAt: DateTime! @rename(attribute: "created_at")
+}
+
+# Esports data, sourced from PandaScore and cached in be. Ids are PandaScore ids.
+
+enum MatchWindow {
+    UPCOMING @enum(value: "upcoming")
+    RUNNING @enum(value: "running")
+    PAST @enum(value: "past")
+}
+
+enum MatchStatus {
+    NOT_STARTED @enum(value: "not_started")
+    RUNNING @enum(value: "running")
+    FINISHED @enum(value: "finished")
+    CANCELED @enum(value: "canceled")
+    POSTPONED @enum(value: "postponed")
+}
+
+enum OpponentType {
+    TEAM
+    PLAYER
+}
+
+type Videogame {
+    id: ID!
+    name: String!
+    slug: String!
+}
+
+type EsportsLeague {
+    id: ID!
+    name: String!
+    imageUrl: String
+}
+
+type EsportsOpponent {
+    id: ID!
+    type: OpponentType!
+    name: String!
+    acronym: String
+    imageUrl: String
+}
+
+type EsportsScore {
+    opponentId: ID!
+    score: Int!
+}
+
+type EsportsStream {
+    url: String!
+    embedUrl: String
+    language: String
+    main: Boolean!
+    official: Boolean!
+}
+
+type EsportsMatch {
+    id: ID!
+    name: String!
+    status: MatchStatus!
+    "e.g. `best_of`."
+    matchType: String
+    numberOfGames: Int
+    scheduledAt: DateTime
+    beginAt: DateTime
+    endAt: DateTime
+    game: Videogame!
+    league: EsportsLeague
+    tournament: String
+    serie: String
+    opponents: [EsportsOpponent!]!
+    scores: [EsportsScore!]!
+    winnerId: ID
+    streams: [EsportsStream!]!
+}
+
+type EsportsPageInfo {
+    currentPage: Int!
+    perPage: Int!
+    total: Int!
+    hasMorePages: Boolean!
+}
+
+type EsportsMatchPage {
+    data: [EsportsMatch!]!
+    pageInfo: EsportsPageInfo!
 }

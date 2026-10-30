@@ -1,0 +1,22 @@
+[
+    {
+        "id": 26,
+        "name": "Valorant",
+        "slug": "valorant"
+    },
+    {
+        "id": 4,
+        "name": "Dota 2",
+        "slug": "dota-2"
+    },
+    {
+        "id": 3,
+        "name": "Counter-Strike",
+        "slug": "cs-go"
+    },
+    {
+        "id": 1,
+        "name": "LoL",
+        "slug": "league-of-legends"
+    }
+]

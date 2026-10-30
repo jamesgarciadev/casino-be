@@ -3,6 +3,7 @@
          xsi:noNamespaceSchemaLocation="vendor/phpunit/phpunit/phpunit.xsd"
          bootstrap="vendor/autoload.php"
          colors="true"
+         defaultTestSuite="Unit,Feature"
 >
     <testsuites>
         <testsuite name="Unit">
@@ -10,6 +11,10 @@
         </testsuite>
         <testsuite name="Feature">
             <directory>tests/Feature</directory>
+        </testsuite>
+        <!-- Calls the real PandaScore API. Excluded by default; run with composer test:live. -->
+        <testsuite name="Live">
+            <directory>tests/Live</directory>
         </testsuite>
     </testsuites>
     <source>

@@ -1,6 +1,18 @@
 type Query {
  "The currently authenticated user (any token scope)."
  me: User
+ "Esports titles PandaScore covers. Public."
+ videogames: [Videogame!]!
+ "Esports matches from PandaScore. Cached for 15s (running), 1 min (upcoming) or 10 min (past). Public."
+ esportsMatches(
+ window: MatchWindow! = UPCOMING
+ "A `Videogame.slug`, e.g. `cs-go`. Unknown slugs return no matches."
+ game: String
+ page: Int! = 1
+ perPage: Int! = 20
+ ): EsportsMatchPage!
+ "A single esports match by PandaScore id. Public."
+ esportsMatch(id: ID!): EsportsMatch
  "Staff: list users. Requires `users.view`."
  adminUsers(
  "Matches name or email."
@@ -74,6 +86,79 @@ type Activity {
  "JSON-encoded properties, including before/after state for admin changes."
  properties: String
  createdAt: DateTime!
+}
+enum MatchWindow {
+ UPCOMING
+ RUNNING
+ PAST
+}
+enum MatchStatus {
+ NOT_STARTED
+ RUNNING
+ FINISHED
+ CANCELED
+ POSTPONED
+}
+enum OpponentType {
+ TEAM
+ PLAYER
+}
+type Videogame {
+ id: ID!
+ name: String!
+ slug: String!
+}
+type EsportsLeague {
+ id: ID!
+ name: String!
+ imageUrl: String
+}
+type EsportsOpponent {
+ id: ID!
+ type: OpponentType!
+ name: String!
+ acronym: String
+ imageUrl: String
+}
+type EsportsScore {
+ opponentId: ID!
+ score: Int!
+}
+type EsportsStream {
+ url: String!
+ embedUrl: String
+ language: String
+ main: Boolean!
+ official: Boolean!
+}
+type EsportsMatch {
+ id: ID!
+ name: String!
+ status: MatchStatus!
+ "e.g. `best_of`."
+ matchType: String
+ numberOfGames: Int
+ scheduledAt: DateTime
+ beginAt: DateTime
+ endAt: DateTime
+ game: Videogame!
+ league: EsportsLeague
+ tournament: String
+ serie: String
+ opponents: [EsportsOpponent!]!
+ scores: [EsportsScore!]!
+ winnerId: ID
+ streams: [EsportsStream!]!
+}
+type EsportsPageInfo {
+ currentPage: Int!
+ perPage: Int!
+ total: Int!
+ hasMorePages: Boolean!
+}
+type EsportsMatchPage {
+ data: [EsportsMatch!]!
+ pageInfo: EsportsPageInfo!
 }
 "Information about pagination using a fully featured paginator."
 type PaginatorInfo {

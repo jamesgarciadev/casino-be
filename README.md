@@ -36,10 +36,26 @@ re-check the policy, so older accounts keep working.
 Every `admin*` field requires an `admin`-scoped token **and** the matching policy, so a customer token
 is rejected even if its user happens to be staff.
 
+## Esports data (PandaScore)
+
+Public queries `videogames`, `esportsMatches(window, game, page, perPage)` and `esportsMatch(id)` serve PandaScore
+data through `App\Services\PandaScore\EsportsCatalog`:
+
+- Clients never call PandaScore and never see the token (`PANDASCORE_API_TOKEN`, server-side only).
+- Responses are cached in Redis: running 15s, upcoming 1 min, past 10 min, single match 30s, videogames 1 day. This
+  keeps us well under the plan's ~1000 requests/hour. If PandaScore fails, the last good copy (up to a day old) is
+  served; with no copy, clients get "Esports data is temporarily unavailable." and the cause is logged.
+- `game` is a `Videogame.slug` (e.g. `cs-go`, `dota-2`); unknown slugs return no matches without an upstream call.
+- The current plan has **no odds**: `/odds` and `/bets` return 404.
+
+On Windows, PHP needs a CA bundle to reach PandaScore over HTTPS (`cURL error 60` otherwise). Set `curl.cainfo` and
+`openssl.cafile` in `php.ini`, e.g. to Git's `C:/Program Files/Git/mingw64/etc/ssl/certs/ca-bundle.crt`.
+
 ## Commands
 
 ```sh
-composer test            # unit + feature tests (SQLite in-memory)
+composer test            # unit + feature tests (SQLite in-memory, PandaScore faked)
+composer test:live       # contract tests against the real PandaScore API (uses the .env token, ~25 requests)
 composer schema:print    # regenerate graphql/schema.public.graphql for frontend codegen
 vendor/bin/pint          # code style
 ```
@@ -50,7 +66,8 @@ vendor/bin/pint          # code style
 |---|---|
 | `tests/Unit` | pure logic with no app or database (role → permission map) |
 | `tests/Feature/GraphQL` | the API contract: auth, token scopes and expiry, rate limits, admin queries and mutations |
-| `tests/Feature/Services` | `AuthService` and `UserRoleService` called directly |
+| `tests/Feature/Services` | `AuthService`, `UserRoleService`, `PandaScoreClient` and `EsportsCatalog` called directly |
+| `tests/Live` | real PandaScore endpoints and field contract; excluded from `composer test` |
 | `tests/Feature/Models`, `Seeders` | user search scope, roles seeded in sync with `App\Enums\Role` |
 
 `Tests\TestCase` seeds roles for every test that uses `RefreshDatabase` and provides `userWithRole()`,

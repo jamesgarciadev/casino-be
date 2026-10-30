@@ -1,0 +1,68 @@
+{
+    "scheduled_at": null,
+    "serie": {
+        "id": 9437,
+        "full_name": "June 2025"
+    },
+    "number_of_games": 3,
+    "streams_list": [
+        {
+            "main": false,
+            "language": "es",
+            "embed_url": "https://player.twitch.tv/?channel=gamersclubes",
+            "official": false,
+            "raw_url": "https://www.twitch.tv/gamersclubes"
+        }
+    ],
+    "begin_at": null,
+    "winner_id": 135505,
+    "league": {
+        "id": 4554,
+        "name": "Gamers Club Liga Série A",
+        "image_url": "https://cdn-api.pandascore.co/images/league/image/4554/Liga_Gamers_Club_SSrie_A_logo.png"
+    },
+    "videogame": {
+        "id": 3,
+        "name": "Counter-Strike",
+        "slug": "cs-go"
+    },
+    "status": "finished",
+    "results": [
+        {
+            "team_id": 135743,
+            "score": 0
+        },
+        {
+            "team_id": 135505,
+            "score": 2
+        }
+    ],
+    "id": 1200600,
+    "name": "Quarterfinal 1: BST.A vs RED.A",
+    "opponents": [
+        {
+            "type": "Team",
+            "opponent": {
+                "id": 135743,
+                "name": "BESTIA Academy",
+                "acronym": "BST.A",
+                "image_url": "https://cdn-api.pandascore.co/images/team/image/135743/186px_bestia_lightmode.png"
+            }
+        },
+        {
+            "type": "Team",
+            "opponent": {
+                "id": 135505,
+                "name": "RED Canids Academy",
+                "acronym": "RED.A",
+                "image_url": "https://cdn-api.pandascore.co/images/team/image/135505/red_canids_cs_go.png"
+            }
+        }
+    ],
+    "end_at": null,
+    "tournament": {
+        "id": 16969,
+        "name": "Playoffs"
+    },
+    "match_type": "best_of"
+}
