@@ -85,7 +85,7 @@ type Mutation {
     "Revoke the token used for this request."
     logout: Boolean! @guard
 
-    "Bet play-money credits on one side of a match. Odds are taken from the match at this moment."
+    "Bet play-money credits on one outcome of a match (or one side, for the WINNER market). Odds are taken from the outcome at this moment."
     placeBet(input: PlaceBetInput! @spread): PlaceBetPayload!
         @guard
         @tokenCan(ability: "customer")
@@ -97,7 +97,7 @@ type Mutation {
         @tokenCan(ability: "customer")
         @throttle(prefix: "placeBet", maxAttempts: 30, decayMinutes: 1)
 
-    "Withdraw an open single for its value at the match's current odds (stake × placed odds ÷ current odds). expected is the value the player was shown; a lower current value is refused."
+    "Withdraw an open single while its market is open, for its value at the outcome's current odds (stake × placed odds ÷ current odds). expected is the value the player was shown; a lower current value is refused."
     cashOutBet(input: CashOutBetInput! @spread): PlaceBetPayload!
         @guard
         @tokenCan(ability: "customer")
@@ -136,6 +136,8 @@ type Subscription {
     matchUpdated(
         "Only matches of this `Videogame.slug`."
         game: String
+        "Only this match (the match page)."
+        id: ID
     ): Match
 }
 
@@ -275,7 +277,8 @@ type EsportsMatchPage {
 
 # Betting (play money). `Match` is a bettable match stored in be: seeded from the design or played out by casino-sim.
 # It is unrelated to `EsportsMatch`, which is PandaScore data passed through read-only.
-# MatchState, Side and BetStatus are registered from PHP enums in AppServiceProvider.
+# MatchState, Side, BetStatus, BetType, MarketType, MarketStatus and OutcomeResult are registered from PHP enums in
+# AppServiceProvider.
 
 type Match @model(class: "App\\Models\\Fixture") {
     id: ID!
@@ -287,15 +290,64 @@ type Match @model(class: "App\\Models\\Fixture") {
     teamB: String! @rename(attribute: "team_b")
     teamAAcronym: String @rename(attribute: "team_a_acronym")
     teamBAcronym: String @rename(attribute: "team_b_acronym")
+    "Best of how many maps (1 for a single map)."
+    bestOf: Int! @rename(attribute: "best_of")
+    "Maps won by team A (rounds or points for older matches without `maps`)."
     scoreA: Int! @rename(attribute: "score_a")
     scoreB: Int! @rename(attribute: "score_b")
-    "Decimal odds for team A. Simulated, not market odds."
+    "Maps played so far, in order. While the match is live the last one is in play."
+    maps: [MapScore!]! @method(name: "mapScores")
+    "Decimal odds for team A to win the match: the WINNER market's odds. Simulated, not market odds."
     oddsA: Float! @rename(attribute: "odds_a")
     oddsB: Float! @rename(attribute: "odds_b")
     startsAt: DateTime! @rename(attribute: "starts_at")
     state: MatchState!
     winner: Side
     streamUrl: String @rename(attribute: "stream_url")
+    "Everything to bet on in this match, in display order. Every match has a WINNER market."
+    markets(status: [MarketStatus!] @in): [Market!]! @hasMany
+}
+
+"One map of a series."
+type MapScore {
+    "1 for the first map."
+    number: Int!
+    name: String!
+    "Rounds (or points) won on this map."
+    scoreA: Int!
+    scoreB: Int!
+    "Set once the map is over."
+    winner: Side
+}
+
+"""
+Something to bet on in a match. Clients build the title from `type` plus `map`, `half`, `round`, `line` and `side`,
+e.g. MAP_TOTAL_ROUNDS, map 3, line 22.5 is "Map 3 - Total rounds" with outcomes OVER and UNDER 22.5.
+"""
+type Market {
+    id: ID!
+    "The feed's stable id for this market within the match."
+    key: String!
+    type: MarketType!
+    map: Int
+    "1 or 2."
+    half: Int
+    round: Int
+    "Handicap (team A's view; team B's is the negative) or total. Always ends in .5."
+    line: Float
+    "The team a TEAM_TOTAL_ROUNDS market is about."
+    side: Side
+    status: MarketStatus!
+    outcomes: [MarketOutcome!]! @hasMany
+}
+
+type MarketOutcome {
+    id: ID!
+    "a, b, draw, over, under, odd, even, yes, no, or a map score such as `2:1` (team A's maps first)."
+    key: String!
+    "Current decimal odds."
+    odds: Float!
+    result: OutcomeResult
 }
 
 type Wallet {
@@ -321,14 +373,16 @@ type Bet {
     settledAt: DateTime @rename(attribute: "settled_at")
 }
 
-"One pick of a bet."
+"One pick of a bet: an outcome of one of the match's markets."
 type BetSelection {
     id: ID!
     match: Match! @belongsTo(relation: "fixture")
-    side: Side!
+    side: Side @deprecated(reason: "Only set for WINNER picks. Use `market` and `outcome`.")
+    market: Market! @hasOneThrough
+    outcome: MarketOutcome! @belongsTo
     "Odds for this pick when the bet was placed."
     odds: Float!
-    "PENDING until its match finishes."
+    "PENDING until its market settles."
     status: BetStatus!
 }
 
@@ -337,9 +391,11 @@ type PlaceBetPayload {
     wallet: Wallet!
 }
 
+"Give either `side` (the WINNER market) or `outcomeId`."
 input PlaceBetInput {
     matchId: ID! @rules(apply: ["integer"])
-    side: Side!
+    side: Side
+    outcomeId: ID @rules(apply: ["nullable", "integer"])
     stake: Int! @rules(apply: ["integer", "min:1", "max:1000000"])
 }
 
@@ -355,9 +411,11 @@ input PlaceComboBetInput {
     stake: Int! @rules(apply: ["integer", "min:1", "max:1000000"])
 }
 
+"Give either `side` (the WINNER market) or `outcomeId`."
 input BetSelectionInput {
     matchId: ID! @rules(apply: ["integer"])
-    side: Side!
+    side: Side
+    outcomeId: ID @rules(apply: ["nullable", "integer"])
 }
 
 input SimCreateMatchInput {
@@ -370,6 +428,7 @@ input SimCreateMatchInput {
     teamB: String! @rename(attribute: "team_b") @rules(apply: ["max:255", "different:teamA"])
     teamAAcronym: String @rename(attribute: "team_a_acronym") @rules(apply: ["nullable", "max:20"])
     teamBAcronym: String @rename(attribute: "team_b_acronym") @rules(apply: ["nullable", "max:20"])
+    bestOf: Int @rename(attribute: "best_of") @rules(apply: ["nullable", "in:1,3,5,7"])
     oddsA: Float! @rename(attribute: "odds_a") @rules(apply: ["numeric", "min:1.01", "max:999"])
     oddsB: Float! @rename(attribute: "odds_b") @rules(apply: ["numeric", "min:1.01", "max:999"])
     startsAt: DateTime! @rename(attribute: "starts_at")
@@ -384,4 +443,38 @@ input SimUpdateMatchInput {
     oddsB: Float @rename(attribute: "odds_b") @rules(apply: ["nullable", "numeric", "min:1.01", "max:999"])
     state: MatchState
     winner: Side
+    "Replaces the map list."
+    maps: [SimMapInput!] @rulesForArray(apply: ["max:7"])
+    """
+    Markets to open, reprice, suspend or settle. Leave out WINNER (it follows oddsA, oddsB and winner). Markets left out
+    are unchanged. A settled market never changes; settling pays its picks at once. A match can only finish once every
+    market is settled.
+    """
+    markets: [SimMarketInput!] @rulesForArray(apply: ["max:200"])
+}
+
+input SimMapInput {
+    name: String! @rules(apply: ["max:40"])
+    scoreA: Int! @rules(apply: ["integer", "min:0", "max:99"])
+    scoreB: Int! @rules(apply: ["integer", "min:0", "max:99"])
+    winner: Side
+}
+
+input SimMarketInput {
+    key: String! @rules(apply: ["regex:/^[a-z0-9._:-]{1,64}$/"])
+    type: MarketType!
+    map: Int @rules(apply: ["nullable", "integer", "min:1", "max:7"])
+    half: Int @rules(apply: ["nullable", "integer", "in:1,2"])
+    round: Int @rules(apply: ["nullable", "integer", "min:1", "max:99"])
+    line: Float @rules(apply: ["nullable", "numeric", "min:-999", "max:999"])
+    side: Side
+    status: MarketStatus!
+    sort: Int @rules(apply: ["nullable", "integer", "min:0", "max:65535"])
+    outcomes: [SimOutcomeInput!]! @rulesForArray(apply: ["min:2", "max:30"])
+}
+
+input SimOutcomeInput {
+    key: String! @rules(apply: ["regex:/^[a-z0-9:]{1,16}$/"])
+    odds: Float! @rules(apply: ["numeric", "min:1.01", "max:999"])
+    result: OutcomeResult
 }

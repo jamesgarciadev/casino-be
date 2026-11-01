@@ -21,6 +21,39 @@ enum BetType {
  SINGLE
  COMBO
 }
+"What a market is about. Clients build its title from the type plus map, half, round, line and side."
+enum MarketType {
+ WINNER
+ MAP_HANDICAP
+ CORRECT_MAP_SCORE
+ TOTAL_MAPS
+ ODD_EVEN_MAPS
+ ROUNDS_HANDICAP
+ TOTAL_ROUNDS
+ TEAM_TOTAL_ROUNDS
+ MAP_WINNER
+ MAP_1X2
+ MAP_ROUNDS_HANDICAP
+ MAP_TOTAL_ROUNDS
+ RACE_TO_ROUNDS
+ ROUND_WINNER
+ PISTOL_ROUND
+ BOMB_PLANTED
+ ACE
+ HALF_1X2
+ HALF_HANDICAP
+}
+"OPEN takes bets; SUSPENDED shows odds but takes no bets; SETTLED has its result."
+enum MarketStatus {
+ OPEN
+ SUSPENDED
+ SETTLED
+}
+"Set once the market is settled: exactly one outcome WON, the rest LOST."
+enum OutcomeResult {
+ WON
+ LOST
+}
 type Query {
  "The currently authenticated user (any token scope)."
  me: User
@@ -78,11 +111,11 @@ type Mutation {
  adminLogin(input: LoginInput!): AuthPayload!
  "Revoke the token used for this request."
  logout: Boolean!
- "Bet play-money credits on one side of a match. Odds are taken from the match at this moment."
+ "Bet play-money credits on one outcome of a match (or one side, for the WINNER market). Odds are taken from the outcome at this moment."
  placeBet(input: PlaceBetInput!): PlaceBetPayload!
  "Bet on two or more picks from different matches (a parlay). Total odds are the product of the picks' odds at this moment; it wins only if every pick wins."
  placeComboBet(input: PlaceComboBetInput!): PlaceBetPayload!
- "Withdraw an open single for its value at the match's current odds (stake × placed odds ÷ current odds). expected is the value the player was shown; a lower current value is refused."
+ "Withdraw an open single while its market is open, for its value at the outcome's current odds (stake × placed odds ÷ current odds). expected is the value the player was shown; a lower current value is refused."
  cashOutBet(input: CashOutBetInput!): PlaceBetPayload!
  "Add 500 play-money credits."
  topUpWallet: Wallet!
@@ -98,6 +131,8 @@ type Subscription {
  matchUpdated(
  "Only matches of this `Videogame.slug`."
  game: String
+ "Only this match (the match page)."
+ id: ID
  ): Match
 }
 "An ISO 8601 datetime string with timezone, e.g. `2026-10-29T13:43:32+00:00`."
@@ -227,15 +262,61 @@ type Match {
  teamB: String!
  teamAAcronym: String
  teamBAcronym: String
+ "Best of how many maps (1 for a single map)."
+ bestOf: Int!
+ "Maps won by team A (rounds or points for older matches without `maps`)."
  scoreA: Int!
  scoreB: Int!
- "Decimal odds for team A. Simulated, not market odds."
+ "Maps played so far, in order. While the match is live the last one is in play."
+ maps: [MapScore!]!
+ "Decimal odds for team A to win the match: the WINNER market's odds. Simulated, not market odds."
  oddsA: Float!
  oddsB: Float!
  startsAt: DateTime!
  state: MatchState!
  winner: Side
  streamUrl: String
+ "Everything to bet on in this match, in display order. Every match has a WINNER market."
+ markets(status: [MarketStatus!]): [Market!]!
+}
+"One map of a series."
+type MapScore {
+ "1 for the first map."
+ number: Int!
+ name: String!
+ "Rounds (or points) won on this map."
+ scoreA: Int!
+ scoreB: Int!
+ "Set once the map is over."
+ winner: Side
+}
+"""
+Something to bet on in a match. Clients build the title from `type` plus `map`, `half`, `round`, `line` and `side`,
+e.g. MAP_TOTAL_ROUNDS, map 3, line 22.5 is "Map 3 - Total rounds" with outcomes OVER and UNDER 22.5.
+"""
+type Market {
+ id: ID!
+ "The feed's stable id for this market within the match."
+ key: String!
+ type: MarketType!
+ map: Int
+ "1 or 2."
+ half: Int
+ round: Int
+ "Handicap (team A's view; team B's is the negative) or total. Always ends in .5."
+ line: Float
+ "The team a TEAM_TOTAL_ROUNDS market is about."
+ side: Side
+ status: MarketStatus!
+ outcomes: [MarketOutcome!]!
+}
+type MarketOutcome {
+ id: ID!
+ "a, b, draw, over, under, odd, even, yes, no, or a map score such as `2:1` (team A's maps first)."
+ key: String!
+ "Current decimal odds."
+ odds: Float!
+ result: OutcomeResult
 }
 type Wallet {
  "Whole play-money credits (CR). No cash value."
@@ -258,23 +339,27 @@ type Bet {
  placedAt: DateTime!
  settledAt: DateTime
 }
-"One pick of a bet."
+"One pick of a bet: an outcome of one of the match's markets."
 type BetSelection {
  id: ID!
  match: Match!
- side: Side!
+ side: Side @deprecated(reason: "Only set for WINNER picks. Use `market` and `outcome`.")
+ market: Market!
+ outcome: MarketOutcome!
  "Odds for this pick when the bet was placed."
  odds: Float!
- "PENDING until its match finishes."
+ "PENDING until its market settles."
  status: BetStatus!
 }
 type PlaceBetPayload {
  bet: Bet!
  wallet: Wallet!
 }
+"Give either `side` (the WINNER market) or `outcomeId`."
 input PlaceBetInput {
  matchId: ID!
- side: Side!
+ side: Side
+ outcomeId: ID
  stake: Int!
 }
 input CashOutBetInput {
@@ -287,9 +372,11 @@ input PlaceComboBetInput {
  selections: [BetSelectionInput!]!
  stake: Int!
 }
+"Give either `side` (the WINNER market) or `outcomeId`."
 input BetSelectionInput {
  matchId: ID!
- side: Side!
+ side: Side
+ outcomeId: ID
 }
 input SimCreateMatchInput {
  "PandaScore match id the matchup was taken from."
@@ -301,6 +388,7 @@ input SimCreateMatchInput {
  teamB: String!
  teamAAcronym: String
  teamBAcronym: String
+ bestOf: Int
  oddsA: Float!
  oddsB: Float!
  startsAt: DateTime!
@@ -314,6 +402,37 @@ input SimUpdateMatchInput {
  oddsB: Float
  state: MatchState
  winner: Side
+ "Replaces the map list."
+ maps: [SimMapInput!]
+ """
+ Markets to open, reprice, suspend or settle. Leave out WINNER (it follows oddsA, oddsB and winner). Markets left out
+ are unchanged. A settled market never changes; settling pays its picks at once. A match can only finish once every
+ market is settled.
+ """
+ markets: [SimMarketInput!]
+}
+input SimMapInput {
+ name: String!
+ scoreA: Int!
+ scoreB: Int!
+ winner: Side
+}
+input SimMarketInput {
+ key: String!
+ type: MarketType!
+ map: Int
+ half: Int
+ round: Int
+ line: Float
+ side: Side
+ status: MarketStatus!
+ sort: Int
+ outcomes: [SimOutcomeInput!]!
+}
+input SimOutcomeInput {
+ key: String!
+ odds: Float!
+ result: OutcomeResult
 }
 "Information about pagination using a fully featured paginator."
 type PaginatorInfo {

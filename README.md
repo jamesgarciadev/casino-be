@@ -73,15 +73,22 @@ is rejected even if its user happens to be staff.
   (exposed as `Match`; `match` is reserved in PHP). Unrelated to `EsportsMatch`, which is raw PandaScore data.
 - `wallet`, `myBets`, `placeBet`, `placeComboBet`, `cashOutBet`, `topUpWallet`: customer token only. Wallets open with 1,000 CR (on registration, or on
   first use for older accounts); top-up adds 500.
-- A bet is a stake on one or more `selections` (table `bet_selections`): `placeBet` makes a SINGLE, `placeComboBet` a
-  COMBO (parlay) of two or more picks, each from a different match; picking both sides of one match is refused. Both
-  run in one transaction with the wallet and match rows locked. Odds are read from the matches, never the client, and
-  stored on each selection. Picks are accepted while a match is upcoming or live; a combo with any finished match is refused whole.
+- A match offers `markets` (winner, map handicap, total rounds, pistol round…), each with `outcomes` and their odds
+  (tables `markets`, `market_outcomes`). The WINNER market follows the match's `oddsA`, `oddsB` and `winner`
+  (`Fixture::syncWinnerMarket`); casino-sim opens, prices, suspends and settles every other market. Only OPEN markets
+  take bets.
+- A bet is a stake on one or more `selections` (table `bet_selections`), each an outcome (`outcomeId`, or `side` for the
+  WINNER market): `placeBet` makes a SINGLE, `placeComboBet` a COMBO (parlay) of two or more picks, each from a
+  different match; two picks in one match are refused. Both run in one transaction with the wallet and match rows
+  locked. Odds are read from the outcomes, never the client, and stored on each selection. Picks are accepted while a
+  match is upcoming or live; a combo with any finished match is refused whole.
 - Total odds multiply the picks' odds in whole cents, rounding half up after each pick, capped at 1,000,000
   (`Bet::totalOdds`). Payout is `stake × total odds` rounded half up to whole credits (`Bet::payoutFor`).
-- Settlement marks each pick on the finished match WON or LOST. A bet is LOST as soon as one pick loses and WON (paid)
-  once every pick has won; until then a combo stays PENDING.
-- `cashOutBet` withdraws an open single (not a combo) for `stake × placed odds ÷ current odds`, rounded half up
+- Settlement marks each pick WON or LOST as soon as its market settles, so a pistol-round pick pays at that round, not
+  at the end of the match. A bet is LOST as soon as one pick loses and WON (paid) once every pick has won; until then a
+  combo stays PENDING.
+- `cashOutBet` withdraws an open single (not a combo) while its market is open, for
+  `stake × placed odds ÷ current odds`, rounded half up
   (`Bet::cashOutValue`, no fee: the odds already carry the margin). The client sends the value it showed; a lower
   current value is refused ("Cash-out value changed to N CR."), an equal or higher one is paid. The bet and its pick
   become CASHED_OUT, so settlement skips them. `CashOutService` locks fixture → bet → wallet, the same order as a feed
@@ -90,7 +97,10 @@ is rejected even if its user happens to be staff.
   `before` (last id held) page newest first by id. Seeded demo matches never finish, so combos that include
   one stay pending.
 - `simCreateMatch`, `simUpdateMatch`: casino-sim's feed (`sim` token + `matches.manage`). State only moves forward
-  (upcoming → live → finished); finishing needs a winner and settles the match's bets (`SettlementService`, idempotent).
+  (upcoming → live → finished); finishing needs a winner and every market settled, and settles the match's bets
+  (`SettlementService`, idempotent). `simUpdateMatch` also takes `maps` (per-map scores) and `markets`
+  (`MarketFeedService`): a market keeps its type, map, half, round, line and outcomes for life, settles with exactly
+  one WON outcome, and never changes once settled.
 - Local seed: the design's 8 demo matches (2 live), static. Re-running `db:seed` refreshes their start times.
 
 Get a token for casino-sim (shown once; `--revoke` replaces old ones):

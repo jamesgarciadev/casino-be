@@ -4,10 +4,12 @@ namespace App\Services;
 
 use App\Enums\BetStatus;
 use App\Enums\BetType;
+use App\Enums\MarketStatus;
 use App\Enums\MatchState;
 use App\Exceptions\RuleViolation;
 use App\Models\Bet;
 use App\Models\Fixture;
+use App\Models\MarketOutcome;
 use App\Models\User;
 use App\Models\Wallet;
 use Illuminate\Support\Facades\DB;
@@ -17,7 +19,7 @@ class CashOutService
     public function __construct(private WalletService $wallets) {}
 
     /**
-     * Withdraw an open single for its value at the match's current odds. `$expected` is the value the player was
+     * Withdraw an open single for its value at its outcome's current odds, while its market is open. `$expected` is the value the player was
      * shown: a higher current value is paid, a lower one is refused so a moving price never pays less than shown.
      *
      * Locks the fixture, then the bet, then the wallet: the same order as a feed update that finishes the match and
@@ -48,7 +50,16 @@ class CashOutService
                 throw new RuleViolation('Betting is closed for this match.');
             }
 
-            $value = Bet::cashOutValue($bet->stake, $bet->odds, $fixture->oddsFor($selection->side));
+            // Read after the fixture lock: the feed takes that lock before it moves odds or settles a market.
+            $outcome = MarketOutcome::with('market')->findOrFail($selection->market_outcome_id);
+
+            if ($outcome->market->status !== MarketStatus::Open) {
+                throw new RuleViolation($outcome->market->status === MarketStatus::Suspended
+                    ? 'This market is suspended.'
+                    : 'This market is closed.');
+            }
+
+            $value = Bet::cashOutValue($bet->stake, $bet->odds, $outcome->odds);
 
             if ($value < $expected) {
                 throw new RuleViolation('Cash-out value changed to '.number_format($value).' CR.');
@@ -61,7 +72,7 @@ class CashOutService
             $wallet = Wallet::lockForUpdate()->findOrFail($user->id);
             $wallet->increment('balance', $value);
 
-            return ['bet' => $bet->load('selections.fixture'), 'wallet' => $wallet];
+            return ['bet' => $bet->load(['selections.fixture', 'selections.market', 'selections.outcome']), 'wallet' => $wallet];
         });
     }
 }

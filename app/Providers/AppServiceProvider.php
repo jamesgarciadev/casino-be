@@ -4,7 +4,10 @@ namespace App\Providers;
 
 use App\Enums\BetStatus;
 use App\Enums\BetType;
+use App\Enums\MarketStatus;
+use App\Enums\MarketType;
 use App\Enums\MatchState;
+use App\Enums\OutcomeResult;
 use App\Enums\Side;
 use App\GraphQL\TolerantContextSerializer;
 use App\GraphQL\Types\BackedEnumType;
@@ -44,6 +47,9 @@ class AppServiceProvider extends ServiceProvider
             $types->register(new BackedEnumType(Side::class, 'Team A or team B of a match.'));
             $types->register(new BackedEnumType(BetStatus::class, 'PENDING until the match finishes, then WON or LOST; CASHED_OUT if a single was withdrawn first.'));
             $types->register(new BackedEnumType(BetType::class, 'SINGLE backs one match; COMBO backs several different matches and wins only if every pick wins.'));
+            $types->register(new BackedEnumType(MarketType::class, 'What a market is about. Clients build its title from the type plus map, half, round, line and side.'));
+            $types->register(new BackedEnumType(MarketStatus::class, 'OPEN takes bets; SUSPENDED shows odds but takes no bets; SETTLED has its result.'));
+            $types->register(new BackedEnumType(OutcomeResult::class, 'Set once the market is settled: exactly one outcome WON, the rest LOST.'));
         });
     }
 }

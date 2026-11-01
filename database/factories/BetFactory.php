@@ -31,14 +31,16 @@ class BetFactory extends Factory
     }
 
     /**
-     * A single gets one selection on a new match, at the bet's odds and status.
+     * A single gets one selection on a new match's winner market, at the bet's odds and status.
      */
     public function configure(): static
     {
         return $this->afterCreating(function (Bet $bet) {
             if ($bet->type === BetType::Single && $bet->selections()->doesntExist()) {
+                $fixture = Fixture::factory()->create();
                 $bet->selections()->create([
-                    'fixture_id' => Fixture::factory()->create()->id,
+                    'fixture_id' => $fixture->id,
+                    'market_outcome_id' => $fixture->winnerMarket->outcomes()->where('key', Side::A->value)->value('id'),
                     'side' => Side::A,
                     'odds' => $bet->odds,
                     'status' => $bet->status,

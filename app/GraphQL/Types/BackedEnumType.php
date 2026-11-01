@@ -7,7 +7,8 @@ use GraphQL\Type\Definition\EnumType;
 use Illuminate\Support\Str;
 
 /**
- * Exposes a PHP backed enum as a GraphQL enum with SCREAMING_CASE names (MatchState::Upcoming -> UPCOMING).
+ * Exposes a PHP backed enum as a GraphQL enum named by its upper-cased values (MatchState::Upcoming 'upcoming' ->
+ * UPCOMING, MarketType::Map1x2 'map_1x2' -> MAP_1X2).
  * Resolvers receive and return the PHP enum cases directly, so models can keep their enum casts.
  */
 final class BackedEnumType extends EnumType
@@ -20,7 +21,7 @@ final class BackedEnumType extends EnumType
         $values = [];
 
         foreach ($enum::cases() as $case) {
-            $values[Str::upper(Str::snake($case->name))] = ['value' => $case];
+            $values[Str::upper((string) $case->value)] = ['value' => $case];
         }
 
         parent::__construct(['name' => class_basename($enum), 'description' => $description, 'values' => $values]);
