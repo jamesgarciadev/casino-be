@@ -29,7 +29,7 @@ class FixtureSeeder extends Seeder
     {
         foreach (self::MATCHES as [$game, $gameName, $tournament, $teamA, $teamB, $oddsA, $oddsB, $minutes, $stream]) {
             // Re-running refreshes the start times; matches with bets keep their rows.
-            Fixture::updateOrCreate(
+            $fixture = Fixture::updateOrCreate(
                 ['source' => MatchSource::Seed, 'tournament' => $tournament, 'team_a' => $teamA, 'team_b' => $teamB],
                 [
                     'game' => $game,
@@ -44,6 +44,9 @@ class FixtureSeeder extends Seeder
                     'stream_url' => $stream,
                 ],
             );
+
+            // DatabaseSeeder runs without model events, so the winner market is set up here.
+            $fixture->syncWinnerMarket();
         }
     }
 }
