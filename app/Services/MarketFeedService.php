@@ -133,13 +133,18 @@ class MarketFeedService
             'side' => $input['side'] ?? null,
         ]);
 
+        // Settling only sets results: outcomes keep the odds they were last offered at.
+        $keepOdds = $market->exists && $input['status'] === MarketStatus::Settled;
+        $current = $market->exists ? $market->outcomes->keyBy('key') : collect();
+        // save() skips the query when nothing changed, which is most markets on most updates.
         $market->fill(['status' => $input['status'], 'sort' => $input['sort'] ?? 0])->save();
 
         foreach ($input['outcomes'] as $outcome) {
-            $market->outcomes()->updateOrCreate(['key' => $outcome['key']], [
-                'odds' => $outcome['odds'],
+            $row = $current->get($outcome['key']) ?? $market->outcomes()->make(['key' => $outcome['key']]);
+            $row->fill([
+                ...($keepOdds ? [] : ['odds' => $outcome['odds']]),
                 'result' => $outcome['result'] ?? null,
-            ]);
+            ])->save();
         }
 
         return $market->unsetRelation('outcomes');

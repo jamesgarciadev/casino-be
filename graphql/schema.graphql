@@ -332,6 +332,7 @@ type Market {
     map: Int
     "1 or 2."
     half: Int
+    "The round a round market is about; for RACE_TO_ROUNDS, the number of rounds to reach first."
     round: Int
     "Handicap (team A's view; team B's is the negative) or total. Always ends in .5."
     line: Float

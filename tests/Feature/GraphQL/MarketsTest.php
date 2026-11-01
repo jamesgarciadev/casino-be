@@ -294,6 +294,16 @@ class MarketsTest extends TestCase
         $this->assertSame(1000 - 100 + 285, $this->customer->wallet->refresh()->balance);
     }
 
+    public function test_settling_keeps_the_odds_last_offered(): void
+    {
+        $this->open([$this->pistol()]);
+        $this->open([$this->pistol(['status' => 'SETTLED', 'outcomes' => [
+            ['key' => 'a', 'odds' => 1.01, 'result' => 'WON'], ['key' => 'b', 'odds' => 1.01, 'result' => 'LOST'],
+        ]])]);
+
+        $this->assertSame(['1.90', '1.85'], Market::where('key', 'map1.pistol.1')->sole()->outcomes->pluck('odds')->all());
+    }
+
     public function test_a_settled_market_never_changes(): void
     {
         $this->open([$this->pistolSettled('a')]);
