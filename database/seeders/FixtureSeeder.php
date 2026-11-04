@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Enums\MarketStatus;
 use App\Enums\MatchSource;
 use App\Enums\MatchState;
 use App\Models\Fixture;
@@ -44,6 +45,9 @@ class FixtureSeeder extends Seeder
                     'stream_url' => $stream,
                 ],
             );
+
+            // A re-seed puts a finished match back in play, so its settled market reopens; the sync clears the results.
+            $fixture->winnerMarket()->update(['status' => MarketStatus::Open]);
 
             // DatabaseSeeder runs without model events, so the winner market is set up here.
             $fixture->syncWinnerMarket();

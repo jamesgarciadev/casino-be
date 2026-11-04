@@ -120,7 +120,9 @@ Laravel's self-hosted websocket server (no cloud service). How a client subscrib
    `POST /graphql/subscriptions/auth`.
 3. Each push arrives as a `lighthouse-subscription` event with the query result.
 
-Only public match data goes over sockets. Wallets and bets are re-queried when a pushed match is `FINISHED`.
+Only public match data goes over sockets. Wallets and bets change when a market settles, so re-query them when a pushed
+match is `FINISHED` or one of its markets has settled (it is `SETTLED`, or gone from `markets(status: [OPEN, SUSPENDED])`).
+That can happen while the match is still `LIVE`.
 
 Each subscription is stored (Redis) and pushed to individually, so every update costs one Reverb call per open
 subscription. Subscriptions expire after `LIGHTHOUSE_SUBSCRIPTION_STORAGE_TTL` (1 hour) and clients re-subscribe

@@ -67,6 +67,25 @@ class MatchUpdatedSubscriptionTest extends TestCase
         app(BroadcastDriverManager::class)->driver()->shouldNotHaveReceived('broadcast');
     }
 
+    public function test_id_filter_delivers_only_that_match(): void
+    {
+        [$watched, $other] = Fixture::factory()->live()->count(2)->create();
+        $this->subscribe("(id: \"{$watched->id}\")");
+
+        $this->updateMatch($other, '{ scoreA: 1 }');
+        app(BroadcastDriverManager::class)->driver()->shouldNotHaveReceived('broadcast');
+
+        $this->updateMatch($watched, '{ scoreA: 2 }');
+        [[, $data]] = $this->broadcasts();
+        $this->assertSame((string) $watched->id, $data['data']['matchUpdated']['id']);
+    }
+
+    public function test_a_malformed_id_cannot_subscribe(): void
+    {
+        $this->graphQL('subscription { matchUpdated(id: "not-a-match") { id } }')
+            ->assertJsonPath('errors.0.message', 'Validation failed for the field [matchUpdated].');
+    }
+
     public function test_created_matches_are_pushed_too(): void
     {
         $this->subscribe();

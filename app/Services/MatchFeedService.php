@@ -31,7 +31,10 @@ class MatchFeedService
             throw new RuleViolation('A new match cannot start as finished.');
         }
 
-        return $this->broadcast(Fixture::create([...$attributes, 'source' => MatchSource::Sim, 'state' => $state])->refresh());
+        // One transaction, so a match never exists without its winner market.
+        $fixture = DB::transaction(fn () => Fixture::create([...$attributes, 'source' => MatchSource::Sim, 'state' => $state]));
+
+        return $this->broadcast($fixture->refresh());
     }
 
     /**

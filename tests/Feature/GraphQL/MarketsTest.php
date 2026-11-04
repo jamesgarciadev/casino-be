@@ -12,10 +12,13 @@ use App\Models\Market;
 use App\Models\MarketOutcome;
 use App\Models\User;
 use App\Services\BettingService;
+use App\Services\MatchFeedService;
+use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Testing\TestResponse;
 use Nuwave\Lighthouse\Testing\MakesGraphQLRequests;
 use PHPUnit\Framework\Attributes\DataProvider;
+use RuntimeException;
 use Tests\TestCase;
 
 class MarketsTest extends TestCase
@@ -357,6 +360,54 @@ class MarketsTest extends TestCase
     {
         $this->feed(['markets' => [$market]])->assertJsonPath('errors.0.message', $message);
         $this->assertSame(1, Market::count());
+    }
+
+    public function test_a_rejected_market_undoes_the_whole_update(): void
+    {
+        $market = $this->pistol(['outcomes' => [['key' => 'a', 'odds' => 1.9], ['key' => 'a', 'odds' => 1.9]]]);
+
+        $this->feed(['scoreA' => 5, 'oddsA' => 1.30, 'markets' => [$market]])
+            ->assertJsonPath('errors.0.message', 'Market map1.pistol.1 needs at least two outcomes with different keys.');
+
+        $this->fixture->refresh();
+        $this->assertSame(0, $this->fixture->score_a);
+        $this->assertSame('1.80', $this->fixture->odds_a);
+    }
+
+    public function test_a_market_cannot_be_on_a_map_the_series_does_not_have(): void
+    {
+        $this->feed(['markets' => [$this->pistol(['map' => 2])]])
+            ->assertJsonPath('errors.0.message', 'Market map1.pistol.1 is on map 2, but the match is a best of 1.');
+        $this->assertSame(1, Market::count());
+
+        $this->fixture->update(['best_of' => 3]);
+        $this->feed(['markets' => [$this->pistol(['map' => 3])]])->assertJsonPath('errors', null);
+        $this->assertSame(2, Market::count());
+    }
+
+    public function test_a_match_is_not_created_without_its_winner_market(): void
+    {
+        Market::creating(fn () => throw new RuntimeException('Disk full'));
+
+        try {
+            app(MatchFeedService::class)->create(Fixture::factory()->make()->only([
+                'game', 'game_name', 'tournament', 'team_a', 'team_b', 'odds_a', 'odds_b', 'starts_at',
+            ]));
+            $this->fail('The market failure should reach the caller.');
+        } catch (RuntimeException $e) {
+            $this->assertSame('Disk full', $e->getMessage());
+        }
+
+        $this->assertSame(1, Fixture::count());
+    }
+
+    public function test_a_pick_cannot_be_written_without_its_outcome(): void
+    {
+        $this->expectException(QueryException::class);
+
+        Bet::factory()->create(['user_id' => $this->customer->id])->selections()->create([
+            'fixture_id' => $this->fixture->id, 'side' => Side::A, 'odds' => '1.80', 'market_outcome_id' => null,
+        ]);
     }
 
     public function test_a_market_keeps_what_it_is_about(): void

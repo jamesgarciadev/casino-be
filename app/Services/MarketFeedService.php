@@ -38,7 +38,7 @@ class MarketFeedService
             }
 
             $seen[$key] = true;
-            $this->validate($input);
+            $this->validate($fixture, $input);
             $market = $existing->get($key);
 
             if ($market !== null && ! $this->sameDefinition($market, $input)) {
@@ -67,12 +67,16 @@ class MarketFeedService
     /**
      * @param  array<string, mixed>  $input
      */
-    private function validate(array $input): void
+    private function validate(Fixture $fixture, array $input): void
     {
         $key = $input['key'];
 
         if ($key === Market::WINNER_KEY || $input['type'] === MarketType::Winner) {
             throw new RuleViolation('The winner market follows oddsA, oddsB and winner.');
+        }
+
+        if (($input['map'] ?? 0) > $fixture->best_of) {
+            throw new RuleViolation("Market {$key} is on map {$input['map']}, but the match is a best of {$fixture->best_of}.");
         }
 
         $keys = array_column($input['outcomes'], 'key');
