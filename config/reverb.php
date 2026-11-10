@@ -36,7 +36,9 @@ return [
             'options' => [
                 'tls' => [],
             ],
-            'max_request_size' => env('REVERB_MAX_REQUEST_SIZE', 10_000),
+            // Every broadcast is one HTTP request to Reverb. A match page's push carries all of its open markets
+            // (about 12 KB for a live CS2 series), which Reverb's 10 KB default refused with "Payload too large".
+            'max_request_size' => env('REVERB_MAX_REQUEST_SIZE', 100_000),
             'scaling' => [
                 'enabled' => env('REVERB_SCALING_ENABLED', false),
                 'channel' => env('REVERB_SCALING_CHANNEL', 'reverb'),
