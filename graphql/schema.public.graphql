@@ -1,392 +1,496 @@
-"Where a match is in its lifecycle. Bets are accepted until FINISHED."
+[32m"Where a match is in its lifecycle. Bets are accepted until FINISHED."
 enum MatchState {
- UPCOMING
- LIVE
- FINISHED
-}
-"Team A or team B of a match."
-enum Side {
- A
- B
-}
-"PENDING until the match finishes, then WON or LOST; CASHED_OUT if a single was withdrawn first."
-enum BetStatus {
- PENDING
- WON
- LOST
- CASHED_OUT
-}
-"SINGLE backs one match; COMBO backs several different matches and wins only if every pick wins."
-enum BetType {
- SINGLE
- COMBO
-}
-type Query {
- "The currently authenticated user (any token scope)."
- me: User
- "Esports titles PandaScore covers. Public."
- videogames: [Videogame!]!
- "Esports matches from PandaScore. Cached for 15s (running), 1 min (upcoming) or 10 min (past). Public."
- esportsMatches(
- window: MatchWindow! = UPCOMING
- "A `Videogame.slug`, e.g. `cs-go`. Unknown slugs return no matches."
- game: String
- page: Int! = 1
- perPage: Int! = 20
- ): EsportsMatchPage!
- "A single esports match by PandaScore id. Public."
- esportsMatch(id: ID!): EsportsMatch
- "Bettable matches, live first, then by start time. Without `state`, finished matches are left out. Public."
- matches(
- state: MatchState
- "A `Videogame.slug`, e.g. `cs-go`."
- game: String
- ): [Match!]!
- "A bettable match. Public."
- match(id: ID!): Match
- "The signed-in customer's play-money wallet (opened with 1,000 CR on first use)."
- wallet: Wallet!
- """
- The signed-in customer's bets, newest first. open: true for PENDING bets only, false for settled (WON or LOST) only.
- Page with first (1-100, default 100) and before: the id of the last bet already loaded.
- """
- myBets(open: Boolean, first: Int = 100, before: ID): [Bet!]!
- "Staff: list users. Requires `users.view`."
- adminUsers(
- "Matches name or email."
- search: String
- "Limits number of fetched items. Maximum allowed value: 100."
- first: Int! = 20
- "The offset from which items are returned."
- page: Int
- ): UserPaginator!
- "Staff: audit log of admin and auth events. Requires `activity.view`."
- adminActivities(
- logName: String
- "Limits number of fetched items. Maximum allowed value: 100."
- first: Int! = 20
- "The offset from which items are returned."
- page: Int
- ): ActivityPaginator!
-}
-type Mutation {
- "Create a customer account and return a customer-scoped token."
- register(input: RegisterInput!): AuthPayload!
- "Customer sign-in for the web app. Returns a customer-scoped token."
- login(input: LoginInput!): AuthPayload!
- "Staff sign-in for the admin console. Returns an admin-scoped token."
- adminLogin(input: LoginInput!): AuthPayload!
- "Revoke the token used for this request."
- logout: Boolean!
- "Bet play-money credits on one side of a match. Odds are taken from the match at this moment."
- placeBet(input: PlaceBetInput!): PlaceBetPayload!
- "Bet on two or more picks from different matches (a parlay). Total odds are the product of the picks' odds at this moment; it wins only if every pick wins."
- placeComboBet(input: PlaceComboBetInput!): PlaceBetPayload!
- "Withdraw an open single for its value at the match's current odds (stake × placed odds ÷ current odds). expected is the value the player was shown; a lower current value is refused."
- cashOutBet(input: CashOutBetInput!): PlaceBetPayload!
- "Add 500 play-money credits."
- topUpWallet: Wallet!
- "casino-sim: create a simulated match."
- simCreateMatch(input: SimCreateMatchInput!): Match!
- "casino-sim: update score, odds or state. Finishing a match (with a winner) settles its bets."
- simUpdateMatch(id: ID!, input: SimUpdateMatchInput!): Match!
- "Owner: replace a user's role. Audit-logged."
- adminAssignRole(userId: ID!, role: Role!): User!
-}
-type Subscription {
- "Pushed whenever casino-sim creates or updates a match (score, odds, state). Public; delivered through Reverb."
- matchUpdated(
- "Only matches of this `Videogame.slug`."
- game: String
- ): Match
-}
-"An ISO 8601 datetime string with timezone, e.g. `2026-10-29T13:43:32+00:00`."
-scalar DateTime
-input RegisterInput {
- name: String!
- email: String!
- password: String!
- passwordConfirmation: String!
-}
-input LoginInput {
- email: String!
- password: String!
-}
-type AuthPayload {
- token: String!
- user: User!
-}
-enum Role {
- CUSTOMER
- MODERATOR
- ADMIN
- OWNER
-}
-type User {
- id: ID!
- name: String!
- email: String!
- roles: [String!]!
- permissions: [String!]!
- emailVerifiedAt: DateTime
- createdAt: DateTime!
- updatedAt: DateTime!
-}
-type Activity {
- id: ID!
- logName: String
- event: String
- description: String!
- causer: User
- subjectType: String
- subjectId: ID
- "JSON-encoded properties, including before/after state for admin changes."
- properties: String
- createdAt: DateTime!
-}
-enum MatchWindow {
- UPCOMING
- RUNNING
- PAST
-}
-enum MatchStatus {
- NOT_STARTED
- RUNNING
- FINISHED
- CANCELED
- POSTPONED
-}
-enum OpponentType {
- TEAM
- PLAYER
-}
-type Videogame {
- id: ID!
- name: String!
- slug: String!
-}
-type EsportsLeague {
- id: ID!
- name: String!
- imageUrl: String
-}
-type EsportsOpponent {
- id: ID!
- type: OpponentType!
- name: String!
- acronym: String
- imageUrl: String
-}
-type EsportsScore {
- opponentId: ID!
- score: Int!
-}
-type EsportsStream {
- url: String!
- embedUrl: String
- language: String
- main: Boolean!
- official: Boolean!
-}
-type EsportsMatch {
- id: ID!
- name: String!
- status: MatchStatus!
- "e.g. `best_of`."
- matchType: String
- numberOfGames: Int
- scheduledAt: DateTime
- beginAt: DateTime
- endAt: DateTime
- game: Videogame!
- league: EsportsLeague
- tournament: String
- serie: String
- opponents: [EsportsOpponent!]!
- scores: [EsportsScore!]!
- winnerId: ID
- streams: [EsportsStream!]!
-}
-type EsportsPageInfo {
- currentPage: Int!
- perPage: Int!
- total: Int!
- hasMorePages: Boolean!
-}
-type EsportsMatchPage {
- data: [EsportsMatch!]!
- pageInfo: EsportsPageInfo!
-}
-type Match {
- id: ID!
- "PandaScore videogame slug, e.g. `cs-go`."
- game: String!
- gameName: String!
- tournament: String!
- teamA: String!
- teamB: String!
- teamAAcronym: String
- teamBAcronym: String
- scoreA: Int!
- scoreB: Int!
- "Decimal odds for team A. Simulated, not market odds."
- oddsA: Float!
- oddsB: Float!
- startsAt: DateTime!
- state: MatchState!
- winner: Side
- streamUrl: String
-}
-type Wallet {
- "Whole play-money credits (CR). No cash value."
- balance: Int!
-}
-type Bet {
- id: ID!
- type: BetType!
- "One pick for a SINGLE, one per match for a COMBO, in the order they were picked."
- selections: [BetSelection!]!
- stake: Int!
- "Total odds when the bet was placed: the product of the selections' odds, rounded to cents after each pick."
- odds: Float!
- "stake × odds, rounded. Credited only if the bet is WON."
- payout: Int!
- "Credits paid when the bet was CASHED_OUT."
- cashOut: Int
- "WON once every selection has won; LOST as soon as one selection loses; CASHED_OUT if a single was withdrawn."
- status: BetStatus!
- placedAt: DateTime!
- settledAt: DateTime
-}
-"One pick of a bet."
-type BetSelection {
- id: ID!
- match: Match!
- side: Side!
- "Odds for this pick when the bet was placed."
- odds: Float!
- "PENDING until its match finishes."
- status: BetStatus!
-}
-type PlaceBetPayload {
- bet: Bet!
- wallet: Wallet!
-}
-input PlaceBetInput {
- matchId: ID!
- side: Side!
- stake: Int!
-}
-input CashOutBetInput {
- betId: ID!
- "The cash-out value the player was shown, in whole credits."
- expected: Int!
-}
-input PlaceComboBetInput {
- "At least two picks, each from a different match."
- selections: [BetSelectionInput!]!
- stake: Int!
-}
-input BetSelectionInput {
- matchId: ID!
- side: Side!
-}
-input SimCreateMatchInput {
- "PandaScore match id the matchup was taken from."
- externalId: ID
- game: String!
- gameName: String!
- tournament: String!
- teamA: String!
- teamB: String!
- teamAAcronym: String
- teamBAcronym: String
- oddsA: Float!
- oddsB: Float!
- startsAt: DateTime!
- state: MatchState
- streamUrl: String
-}
-input SimUpdateMatchInput {
- scoreA: Int
- scoreB: Int
- oddsA: Float
- oddsB: Float
- state: MatchState
- winner: Side
-}
-"Information about pagination using a fully featured paginator."
-type PaginatorInfo {
- "Number of items in the current page."
- count: Int!
- "Index of the current page."
- currentPage: Int!
- "Index of the first item in the current page."
- firstItem: Int
- "Are there more pages after this one?"
- hasMorePages: Boolean!
- "Index of the last item in the current page."
- lastItem: Int
- "Index of the last available page."
- lastPage: Int!
- "Number of items per page."
- perPage: Int!
- "Number of total available items."
- total: Int!
-}
-"A paginated list of User items."
-type UserPaginator {
- "Pagination information about the list of items."
- paginatorInfo: PaginatorInfo!
- "A list of User items."
- data: [User!]!
-}
-"A paginated list of Activity items."
-type ActivityPaginator {
- "Pagination information about the list of items."
- paginatorInfo: PaginatorInfo!
- "A list of Activity items."
- data: [Activity!]!
-}
-"Directions for ordering a list of records."
-enum SortOrder {
- "Sort records in ascending order."
- ASC
- "Sort records in descending order."
- DESC
-}
-"Aggregate functions when ordering by a relation without specifying a column."
-enum OrderByRelationAggregateFunction {
- "Amount of items."
- COUNT
-}
-"Aggregate functions when ordering by a relation that may specify a column."
-enum OrderByRelationWithColumnAggregateFunction {
- "Average."
- AVG
- "Minimum."
- MIN
- "Maximum."
- MAX
- "Sum."
- SUM
- "Amount of items."
- COUNT
-}
-"Allows ordering a list of records."
-input OrderByClause {
- "The column that is used for ordering."
- column: String!
- "The direction that is used for ordering."
- order: SortOrder!
-}
-"Specify if you want to include or exclude trashed results from a query."
-enum Trashed {
- "Only return trashed results."
- ONLY
- "Return both trashed and non-trashed results."
- WITH
- "Only return non-trashed results."
- WITHOUT
+  UPCOMING
+  LIVE
+  FINISHED
 }
 
+"Team A or team B of a match."
+enum Side {
+  A
+  B
+}
+
+"PENDING until the match finishes, then WON or LOST; CASHED_OUT if a single was withdrawn first."
+enum BetStatus {
+  PENDING
+  WON
+  LOST
+  CASHED_OUT
+}
+
+"SINGLE backs one match; COMBO backs several different matches and wins only if every pick wins."
+enum BetType {
+  SINGLE
+  COMBO
+}
+
+type Query {
+  "The currently authenticated user (any token scope)."
+  me: User
+
+  "Esports titles PandaScore covers. Public."
+  videogames: [Videogame!]!
+
+  "Esports matches from PandaScore. Cached for 15s (running), 1 min (upcoming) or 10 min (past). Public."
+  esportsMatches(
+    window: MatchWindow! = UPCOMING
+
+    "A `Videogame.slug`, e.g. `cs-go`. Unknown slugs return no matches."
+    game: String
+
+    page: Int! = 1
+    perPage: Int! = 20
+  ): EsportsMatchPage!
+
+  "A single esports match by PandaScore id. Public."
+  esportsMatch(id: ID!): EsportsMatch
+
+  "Bettable matches, live first, then by start time. Without `state`, finished matches are left out. Public."
+  matches(
+    state: MatchState
+
+    "A `Videogame.slug`, e.g. `cs-go`."
+    game: String
+  ): [Match!]!
+
+  "A bettable match. Public."
+  match(id: ID!): Match
+
+  "The signed-in customer's play-money wallet (opened with 1,000 CR on first use)."
+  wallet: Wallet!
+
+  """
+  The signed-in customer's bets, newest first. open: true for PENDING bets only, false for settled (WON or LOST) only.
+  Page with first (1-100, default 100) and before: the id of the last bet already loaded.
+  """
+  myBets(open: Boolean, first: Int = 100, before: ID): [Bet!]!
+
+  "Staff: list users. Requires `users.view`."
+  adminUsers(
+    "Matches name or email."
+    search: String
+
+    "Limits number of fetched items. Maximum allowed value: 100."
+    first: Int! = 20
+
+    "The offset from which items are returned."
+    page: Int
+  ): UserPaginator!
+
+  "Staff: audit log of admin and auth events. Requires `activity.view`."
+  adminActivities(
+    logName: String
+
+    "Limits number of fetched items. Maximum allowed value: 100."
+    first: Int! = 20
+
+    "The offset from which items are returned."
+    page: Int
+  ): ActivityPaginator!
+}
+
+type Mutation {
+  "Create a customer account and return a customer-scoped token."
+  register(input: RegisterInput!): AuthPayload!
+
+  "Customer sign-in for the web app. Returns a customer-scoped token."
+  login(input: LoginInput!): AuthPayload!
+
+  "Staff sign-in for the admin console. Returns an admin-scoped token."
+  adminLogin(input: LoginInput!): AuthPayload!
+
+  "Revoke the token used for this request."
+  logout: Boolean!
+
+  "Bet play-money credits on one side of a match. Odds are taken from the match at this moment."
+  placeBet(input: PlaceBetInput!): PlaceBetPayload!
+
+  "Bet on two or more picks from different matches (a parlay). Total odds are the product of the picks' odds at this moment; it wins only if every pick wins."
+  placeComboBet(input: PlaceComboBetInput!): PlaceBetPayload!
+
+  "Withdraw an open single for its value at the match's current odds (stake × placed odds ÷ current odds). expected is the value the player was shown; a lower current value is refused."
+  cashOutBet(input: CashOutBetInput!): PlaceBetPayload!
+
+  "Add 500 play-money credits."
+  topUpWallet: Wallet!
+
+  "casino-sim: create a simulated match."
+  simCreateMatch(input: SimCreateMatchInput!): Match!
+
+  "casino-sim: update score, odds or state. Finishing a match (with a winner) settles its bets."
+  simUpdateMatch(id: ID!, input: SimUpdateMatchInput!): Match!
+
+  "Owner: replace a user's role. Audit-logged."
+  adminAssignRole(userId: ID!, role: Role!): User!
+}
+
+type Subscription {
+  "Pushed whenever casino-sim creates or updates a match (score, odds, state). Public; delivered through Reverb."
+  matchUpdated(
+    "Only matches of this `Videogame.slug`."
+    game: String
+  ): Match
+}
+
+"An ISO 8601 datetime string with timezone, e.g. `2026-10-29T13:43:32+00:00`."
+scalar DateTime
+
+input RegisterInput {
+  name: String!
+  email: String!
+  password: String!
+  passwordConfirmation: String!
+}
+
+input LoginInput {
+  email: String!
+  password: String!
+}
+
+type AuthPayload {
+  token: String!
+  user: User!
+}
+
+enum Role {
+  CUSTOMER
+  MODERATOR
+  ADMIN
+  OWNER
+}
+
+type User {
+  id: ID!
+  name: String!
+  email: String!
+  roles: [String!]!
+  permissions: [String!]!
+  emailVerifiedAt: DateTime
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
+type Activity {
+  id: ID!
+  logName: String
+  event: String
+  description: String!
+  causer: User
+  subjectType: String
+  subjectId: ID
+
+  "JSON-encoded properties, including before/after state for admin changes."
+  properties: String
+
+  createdAt: DateTime!
+}
+
+enum MatchWindow {
+  UPCOMING
+  RUNNING
+  PAST
+}
+
+enum MatchStatus {
+  NOT_STARTED
+  RUNNING
+  FINISHED
+  CANCELED
+  POSTPONED
+}
+
+enum OpponentType {
+  TEAM
+  PLAYER
+}
+
+type Videogame {
+  id: ID!
+  name: String!
+  slug: String!
+}
+
+type EsportsLeague {
+  id: ID!
+  name: String!
+  imageUrl: String
+}
+
+type EsportsOpponent {
+  id: ID!
+  type: OpponentType!
+  name: String!
+  acronym: String
+  imageUrl: String
+}
+
+type EsportsScore {
+  opponentId: ID!
+  score: Int!
+}
+
+type EsportsStream {
+  url: String!
+  embedUrl: String
+  language: String
+  main: Boolean!
+  official: Boolean!
+}
+
+type EsportsMatch {
+  id: ID!
+  name: String!
+  status: MatchStatus!
+
+  "e.g. `best_of`."
+  matchType: String
+
+  numberOfGames: Int
+  scheduledAt: DateTime
+  beginAt: DateTime
+  endAt: DateTime
+  game: Videogame!
+  league: EsportsLeague
+  tournament: String
+  serie: String
+  opponents: [EsportsOpponent!]!
+  scores: [EsportsScore!]!
+  winnerId: ID
+  streams: [EsportsStream!]!
+}
+
+type EsportsPageInfo {
+  currentPage: Int!
+  perPage: Int!
+  total: Int!
+  hasMorePages: Boolean!
+}
+
+type EsportsMatchPage {
+  data: [EsportsMatch!]!
+  pageInfo: EsportsPageInfo!
+}
+
+type Match {
+  id: ID!
+
+  "PandaScore videogame slug, e.g. `cs-go`."
+  game: String!
+
+  gameName: String!
+  tournament: String!
+  teamA: String!
+  teamB: String!
+  teamAAcronym: String
+  teamBAcronym: String
+  scoreA: Int!
+  scoreB: Int!
+
+  "Decimal odds for team A. Simulated, not market odds."
+  oddsA: Float!
+
+  oddsB: Float!
+  startsAt: DateTime!
+  state: MatchState!
+  winner: Side
+  streamUrl: String
+}
+
+type Wallet {
+  "Whole play-money credits (CR). No cash value."
+  balance: Int!
+}
+
+type Bet {
+  id: ID!
+  type: BetType!
+
+  "One pick for a SINGLE, one per match for a COMBO, in the order they were picked."
+  selections: [BetSelection!]!
+
+  stake: Int!
+
+  "Total odds when the bet was placed: the product of the selections' odds, rounded to cents after each pick."
+  odds: Float!
+
+  "stake × odds, rounded. Credited only if the bet is WON."
+  payout: Int!
+
+  "Credits paid when the bet was CASHED_OUT."
+  cashOut: Int
+
+  "WON once every selection has won; LOST as soon as one selection loses; CASHED_OUT if a single was withdrawn."
+  status: BetStatus!
+
+  placedAt: DateTime!
+  settledAt: DateTime
+}
+
+"One pick of a bet."
+type BetSelection {
+  id: ID!
+  match: Match!
+  side: Side!
+
+  "Odds for this pick when the bet was placed."
+  odds: Float!
+
+  "PENDING until its match finishes."
+  status: BetStatus!
+}
+
+type PlaceBetPayload {
+  bet: Bet!
+  wallet: Wallet!
+}
+
+input PlaceBetInput {
+  matchId: ID!
+  side: Side!
+  stake: Int!
+}
+
+input CashOutBetInput {
+  betId: ID!
+
+  "The cash-out value the player was shown, in whole credits."
+  expected: Int!
+}
+
+input PlaceComboBetInput {
+  "At least two picks, each from a different match."
+  selections: [BetSelectionInput!]!
+  stake: Int!
+}
+
+input BetSelectionInput {
+  matchId: ID!
+  side: Side!
+}
+
+input SimCreateMatchInput {
+  "PandaScore match id the matchup was taken from."
+  externalId: ID
+  game: String!
+  gameName: String!
+  tournament: String!
+  teamA: String!
+  teamB: String!
+  teamAAcronym: String
+  teamBAcronym: String
+  oddsA: Float!
+  oddsB: Float!
+  startsAt: DateTime!
+  state: MatchState
+  streamUrl: String
+}
+
+input SimUpdateMatchInput {
+  scoreA: Int
+  scoreB: Int
+  oddsA: Float
+  oddsB: Float
+  state: MatchState
+  winner: Side
+}
+
+"Information about pagination using a fully featured paginator."
+type PaginatorInfo {
+  "Number of items in the current page."
+  count: Int!
+
+  "Index of the current page."
+  currentPage: Int!
+
+  "Index of the first item in the current page."
+  firstItem: Int
+
+  "Are there more pages after this one?"
+  hasMorePages: Boolean!
+
+  "Index of the last item in the current page."
+  lastItem: Int
+
+  "Index of the last available page."
+  lastPage: Int!
+
+  "Number of items per page."
+  perPage: Int!
+
+  "Number of total available items."
+  total: Int!
+}
+
+"A paginated list of User items."
+type UserPaginator {
+  "Pagination information about the list of items."
+  paginatorInfo: PaginatorInfo!
+
+  "A list of User items."
+  data: [User!]!
+}
+
+"A paginated list of Activity items."
+type ActivityPaginator {
+  "Pagination information about the list of items."
+  paginatorInfo: PaginatorInfo!
+
+  "A list of Activity items."
+  data: [Activity!]!
+}
+
+"Directions for ordering a list of records."
+enum SortOrder {
+  "Sort records in ascending order."
+  ASC
+
+  "Sort records in descending order."
+  DESC
+}
+
+"Aggregate functions when ordering by a relation without specifying a column."
+enum OrderByRelationAggregateFunction {
+  "Amount of items."
+  COUNT
+}
+
+"Aggregate functions when ordering by a relation that may specify a column."
+enum OrderByRelationWithColumnAggregateFunction {
+  "Average."
+  AVG
+
+  "Minimum."
+  MIN
+
+  "Maximum."
+  MAX
+
+  "Sum."
+  SUM
+
+  "Amount of items."
+  COUNT
+}
+
+"Allows ordering a list of records."
+input OrderByClause {
+  "The column that is used for ordering."
+  column: String!
+
+  "The direction that is used for ordering."
+  order: SortOrder!
+}
+
+"Specify if you want to include or exclude trashed results from a query."
+enum Trashed {
+  "Only return trashed results."
+  ONLY
+
+  "Return both trashed and non-trashed results."
+  WITH
+
+  "Only return non-trashed results."
+  WITHOUT
+}
+[39m

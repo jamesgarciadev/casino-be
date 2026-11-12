@@ -52,6 +52,7 @@
             "@php artisan dev"
         ],
         "schema:print": [
+            "@putenv PAO_DISABLE=1",
             "@php artisan lighthouse:print-schema > graphql/schema.public.graphql"
         ],
         "test": [
