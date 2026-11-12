@@ -1,4 +1,4 @@
-[32m"Where a match is in its lifecycle. Bets are accepted until FINISHED."
+"Where a match is in its lifecycle. Bets are accepted until FINISHED."
 enum MatchState {
   UPCOMING
   LIVE
@@ -493,4 +493,4 @@ enum Trashed {
   "Only return non-trashed results."
   WITHOUT
 }
-[39m
+

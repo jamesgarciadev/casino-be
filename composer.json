@@ -53,7 +53,7 @@
         ],
         "schema:print": [
             "@putenv PAO_DISABLE=1",
-            "@php artisan lighthouse:print-schema > graphql/schema.public.graphql"
+            "@php artisan lighthouse:print-schema --no-ansi > graphql/schema.public.graphql"
         ],
         "test": [
             "@php artisan config:clear --ansi @no_additional_args",
