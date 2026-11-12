@@ -1,0 +1,107 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    name: Pint, PHPUnit and schema
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.5"
+          extensions: pdo_sqlite, pdo_mysql, mbstring, intl
+          coverage: none
+
+      - name: Cache Composer downloads
+        uses: actions/cache@v4
+        with:
+          path: ~/.composer/cache/files
+          key: composer-${{ hashFiles('composer.lock') }}
+          restore-keys: composer-
+
+      - run: composer install --no-interaction --no-progress --prefer-dist
+
+      - name: Environment
+        run: |
+          cp .env.example .env
+          php artisan key:generate --no-interaction
+
+      - name: Code style
+        run: vendor/bin/pint --test
+
+      # phpunit.xml runs everything on in-memory SQLite.
+      - name: Tests
+        run: php artisan test
+
+      # web and fe generate their types from this file, so it must match the schema.
+      - name: Public schema is up to date
+        run: |
+          php artisan lighthouse:print-schema > "$RUNNER_TEMP/schema.public.graphql"
+          diff -u graphql/schema.public.graphql "$RUNNER_TEMP/schema.public.graphql" || {
+            echo "::error::graphql/schema.public.graphql is stale. Run composer schema:print and commit it."
+            exit 1
+          }
+
+  mysql:
+    # Tests run on SQLite but production is MySQL, so prove the migrations and seeders work there too.
+    name: Migrations on MySQL
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: secret
+          MYSQL_DATABASE: casino
+        ports: ["3306:3306"]
+        options: >-
+          --health-cmd "mysqladmin ping -h 127.0.0.1 -psecret"
+          --health-interval 5s --health-timeout 3s --health-retries 20
+    env:
+      CACHE_STORE: array
+      SESSION_DRIVER: array
+      QUEUE_CONNECTION: sync
+      BROADCAST_CONNECTION: log
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.5"
+          extensions: pdo_mysql, mbstring, intl
+          coverage: none
+
+      - name: Cache Composer downloads
+        uses: actions/cache@v4
+        with:
+          path: ~/.composer/cache/files
+          key: composer-${{ hashFiles('composer.lock') }}
+          restore-keys: composer-
+
+      - run: composer install --no-interaction --no-progress --prefer-dist
+
+      - name: Environment
+        run: |
+          cp .env.example .env
+          php artisan key:generate --no-interaction
+
+      - name: Migrate and seed
+        run: php artisan migrate:fresh --seed --force --no-interaction
+
+      # Every down() has to work on MySQL too (e.g. foreign keys dropped before their indexes).
+      - name: Roll back and migrate again
+        run: |
+          php artisan migrate:reset --force --no-interaction
+          php artisan migrate --force --no-interaction
