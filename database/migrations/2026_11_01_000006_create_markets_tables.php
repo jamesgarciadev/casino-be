@@ -83,9 +83,11 @@ return new class extends Migration
 
     public function down(): void
     {
-        // Picks on other markets have no form without markets, so their bets go too.
-        $orphaned = DB::table('bet_selections')->whereNull('side')->pluck('bet_id')->unique();
-        DB::table('bets')->whereIn('id', $orphaned)->delete();
+        // A pick on any market but the winner has no form without markets. Rather than delete players' bets, refuse
+        // before changing anything; they have to be settled or removed on purpose first.
+        if (DB::table('bet_selections')->whereNull('side')->exists()) {
+            throw new RuntimeException('Cannot roll back markets: some bets have picks on markets other than the winner.');
+        }
 
         Schema::table('bet_selections', function (Blueprint $table) {
             $table->dropForeign(['market_outcome_id']);

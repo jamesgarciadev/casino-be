@@ -8,6 +8,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use RuntimeException;
 use Tests\TestCase;
 
 class MarketsMigrationTest extends TestCase
@@ -54,7 +55,7 @@ class MarketsMigrationTest extends TestCase
         ], $picks->all());
     }
 
-    public function test_rolling_back_removes_bets_that_only_make_sense_with_markets(): void
+    public function test_rolling_back_is_refused_while_bets_have_picks_on_other_markets(): void
     {
         $user = User::factory()->create();
         $fixture = Fixture::factory()->live()->create();
@@ -76,12 +77,21 @@ class MarketsMigrationTest extends TestCase
         $pick($mixedCombo, $fixture, null, $over->id);
         $pick($mixedCombo, $other, 'a', $winner($other));
 
-        Artisan::call('migrate:rollback', ['--path' => self::MIGRATIONS, '--force' => true]);
+        $bets = DB::table('bets')->orderBy('id')->get()->all();
+        $picks = DB::table('bet_selections')->orderBy('id')->get()->all();
 
-        $this->assertSame([$sideOnly], DB::table('bets')->pluck('id')->all());
-        $this->assertSame([$sideOnly], DB::table('bet_selections')->pluck('bet_id')->all());
-        $this->assertFalse(Schema::hasColumn('bet_selections', 'market_outcome_id'));
-        $this->assertFalse(Schema::hasTable('markets'));
+        try {
+            Artisan::call('migrate:rollback', ['--path' => self::MIGRATIONS, '--force' => true]);
+            $this->fail('The rollback should have been refused.');
+        } catch (RuntimeException $e) {
+            $this->assertSame('Cannot roll back markets: some bets have picks on markets other than the winner.', $e->getMessage());
+        }
+
+        // Every bet and pick survives, including the mixed combo's winner pick, and markets are still there.
+        $this->assertEquals($bets, DB::table('bets')->orderBy('id')->get()->all());
+        $this->assertEquals($picks, DB::table('bet_selections')->orderBy('id')->get()->all());
+        $this->assertTrue(Schema::hasTable('markets'));
+        $this->assertTrue(Schema::hasColumn('bet_selections', 'market_outcome_id'));
 
         Artisan::call('migrate', ['--path' => self::MIGRATIONS, '--force' => true]);
     }
