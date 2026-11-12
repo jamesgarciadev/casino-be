@@ -23,7 +23,8 @@ final class MatchUpdated extends GraphQLSubscription
     public function filter(Subscriber $subscriber, mixed $root): bool
     {
         $game = $subscriber->args['game'] ?? null;
+        $id = $subscriber->args['id'] ?? null;
 
-        return $game === null || $game === $root->game;
+        return ($game === null || $game === $root->game) && ($id === null || (string) $id === (string) $root->id);
     }
 }

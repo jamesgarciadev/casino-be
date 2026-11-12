@@ -1,21 +1,47 @@
 # casino-be
 
-Headless GraphQL API for Casino. Laravel 13 + Lighthouse + Sanctum + Redis + MySQL. No UI.
-See [ARCHITECTURE.md](ARCHITECTURE.md) for how this fits with `casino-fe` and `casino-web`.
+Headless GraphQL API for **0dds.bet**: esports matches, play-money wallets and bets, live updates, and staff
+administration. No UI. See [ARCHITECTURE.md](ARCHITECTURE.md) for how this fits with `casino-fe`, `casino-web`
+and `casino-sim`.
 
-## Run locally
+## Tech stack
+
+| Layer | What we use |
+|---|---|
+| Language and framework | PHP 8.3+, Laravel 13 |
+| API | GraphQL with Lighthouse 6, schema first (`graphql/schema.graphql`); GraphiQL in development |
+| Auth | Laravel Sanctum tokens with scopes `customer`, `admin` and `sim`; roles and permissions with spatie/laravel-permission; audit log with spatie/laravel-activitylog |
+| Realtime | Laravel Reverb (self-hosted websockets) carrying GraphQL subscriptions |
+| Data | MySQL 8.4 and Redis 7.4 (cache and subscription storage, predis client), both from `docker-compose.yml` |
+| External data | PandaScore REST API, called server-side only |
+| Tests and style | PHPUnit 12 (SQLite in memory), Laravel Pint |
+
+## Prerequisites
+
+- PHP 8.3 or newer and Composer 2
+- Docker, for MySQL and Redis
+- Optional: a PandaScore API token in `PANDASCORE_API_TOKEN`. The `esports*` queries need it, and so does casino-sim,
+  which reads matchups through them. Matches, wallets and bets work without it.
+
+Ports: **8000** API, **6001** Reverb, 3306 MySQL, 6379 Redis.
+
+## Start it up
+
+Every other repo needs this one running first.
 
 ```sh
-docker compose up -d --wait      # MySQL (casino) on 3306, Redis on 6379
-composer install
+docker compose up -d --wait      # 1. MySQL (database casino) and Redis
+composer install                 # 2. dependencies
 cp .env.example .env && php artisan key:generate
-php artisan reverb:install       # first time only: generates REVERB_APP_ID/KEY/SECRET
-php artisan migrate --seed
-php artisan serve                # http://localhost:8000/graphql
-php artisan reverb:start         # websockets on :6001, for GraphQL subscriptions (separate terminal)
+php artisan reverb:install       # 3. first time only: generates REVERB_APP_ID/KEY/SECRET into .env
+php artisan migrate --seed       # 4. tables, demo accounts and 8 demo matches
+php artisan serve                # 5. the API on http://localhost:8000/graphql
+php artisan reverb:start         # 6. websockets on :6001 (a second terminal)
+php artisan sim:token            # 7. only for casino-sim: prints its token once
 ```
 
-GraphiQL (dev only): http://localhost:8000/graphiql
+It is working when GraphiQL (dev only) opens at http://localhost:8000/graphiql and `{ matches { teamA teamB } }`
+returns the demo matches. Without step 6 everything still works, but live scores and odds stop updating in the apps.
 
 Local demo accounts (password `Password1!`): `customer@casino.test`, `moderator@casino.test`,
 `admin@casino.test`, `owner@casino.test`.
@@ -47,15 +73,22 @@ is rejected even if its user happens to be staff.
   (exposed as `Match`; `match` is reserved in PHP). Unrelated to `EsportsMatch`, which is raw PandaScore data.
 - `wallet`, `myBets`, `placeBet`, `placeComboBet`, `cashOutBet`, `topUpWallet`: customer token only. Wallets open with 1,000 CR (on registration, or on
   first use for older accounts); top-up adds 500.
-- A bet is a stake on one or more `selections` (table `bet_selections`): `placeBet` makes a SINGLE, `placeComboBet` a
-  COMBO (parlay) of two or more picks, each from a different match; picking both sides of one match is refused. Both
-  run in one transaction with the wallet and match rows locked. Odds are read from the matches, never the client, and
-  stored on each selection. Picks are accepted while a match is upcoming or live; a combo with any finished match is refused whole.
+- A match offers `markets` (winner, map handicap, total rounds, pistol round…), each with `outcomes` and their odds
+  (tables `markets`, `market_outcomes`). The WINNER market follows the match's `oddsA`, `oddsB` and `winner`
+  (`Fixture::syncWinnerMarket`); casino-sim opens, prices, suspends and settles every other market. Only OPEN markets
+  take bets.
+- A bet is a stake on one or more `selections` (table `bet_selections`), each an outcome (`outcomeId`, or `side` for the
+  WINNER market): `placeBet` makes a SINGLE, `placeComboBet` a COMBO (parlay) of two or more picks, each from a
+  different match; two picks in one match are refused. Both run in one transaction with the wallet and match rows
+  locked. Odds are read from the outcomes, never the client, and stored on each selection. Picks are accepted while a
+  match is upcoming or live; a combo with any finished match is refused whole.
 - Total odds multiply the picks' odds in whole cents, rounding half up after each pick, capped at 1,000,000
   (`Bet::totalOdds`). Payout is `stake × total odds` rounded half up to whole credits (`Bet::payoutFor`).
-- Settlement marks each pick on the finished match WON or LOST. A bet is LOST as soon as one pick loses and WON (paid)
-  once every pick has won; until then a combo stays PENDING.
-- `cashOutBet` withdraws an open single (not a combo) for `stake × placed odds ÷ current odds`, rounded half up
+- Settlement marks each pick WON or LOST as soon as its market settles, so a pistol-round pick pays at that round, not
+  at the end of the match. A bet is LOST as soon as one pick loses and WON (paid) once every pick has won; until then a
+  combo stays PENDING.
+- `cashOutBet` withdraws an open single (not a combo) while its market is open, for
+  `stake × placed odds ÷ current odds`, rounded half up
   (`Bet::cashOutValue`, no fee: the odds already carry the margin). The client sends the value it showed; a lower
   current value is refused ("Cash-out value changed to N CR."), an equal or higher one is paid. The bet and its pick
   become CASHED_OUT, so settlement skips them. `CashOutService` locks fixture → bet → wallet, the same order as a feed
@@ -64,7 +97,10 @@ is rejected even if its user happens to be staff.
   `before` (last id held) page newest first by id. Seeded demo matches never finish, so combos that include
   one stay pending.
 - `simCreateMatch`, `simUpdateMatch`: casino-sim's feed (`sim` token + `matches.manage`). State only moves forward
-  (upcoming → live → finished); finishing needs a winner and settles the match's bets (`SettlementService`, idempotent).
+  (upcoming → live → finished); finishing needs a winner and every market settled, and settles the match's bets
+  (`SettlementService`, idempotent). `simUpdateMatch` also takes `maps` (per-map scores) and `markets`
+  (`MarketFeedService`): a market keeps its type, map, half, round, line and outcomes for life, settles with exactly
+  one WON outcome, and never changes once settled.
 - Local seed: the design's 8 demo matches (2 live), static. Re-running `db:seed` refreshes their start times.
 
 Get a token for casino-sim (shown once; `--revoke` replaces old ones):
@@ -84,7 +120,9 @@ Laravel's self-hosted websocket server (no cloud service). How a client subscrib
    `POST /graphql/subscriptions/auth`.
 3. Each push arrives as a `lighthouse-subscription` event with the query result.
 
-Only public match data goes over sockets. Wallets and bets are re-queried when a pushed match is `FINISHED`.
+Only public match data goes over sockets. Wallets and bets change when a market settles, so re-query them when a pushed
+match is `FINISHED` or one of its markets has settled (it is `SETTLED`, or gone from `markets(status: [OPEN, SUSPENDED])`).
+That can happen while the match is still `LIVE`.
 
 Each subscription is stored (Redis) and pushed to individually, so every update costs one Reverb call per open
 subscription. Subscriptions expire after `LIGHTHOUSE_SUBSCRIPTION_STORAGE_TTL` (1 hour) and clients re-subscribe

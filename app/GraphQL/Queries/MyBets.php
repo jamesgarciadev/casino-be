@@ -26,7 +26,7 @@ final readonly class MyBets
                 ? $query->where('status', BetStatus::Pending)
                 : $query->where('status', '!=', BetStatus::Pending))
             ->when($before !== null, fn ($query) => $query->where('id', '<', (int) $before))
-            ->with('selections.fixture')
+            ->with(['selections.fixture', 'selections.market', 'selections.outcome'])
             ->orderByDesc('id')
             ->limit($args['first'])
             ->get();
